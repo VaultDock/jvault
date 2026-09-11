@@ -22,6 +22,7 @@
     <module>jvault-storage</module>
     <module>jvault-persistence</module>
     <module>jvault-content</module>
+    <module>jvault-ingest</module>
   </modules>
 
   <properties>
@@ -38,6 +39,7 @@
     <ojdbc.version>23.5.0.24.07</ojdbc.version>
     <testcontainers.version>1.20.4</testcontainers.version>
     <spring.version>6.1.14</spring.version>
+    <jackson.version>2.18.2</jackson.version>
   </properties>
 
   <dependencyManagement>
@@ -78,6 +80,11 @@
         <groupId>org.springframework</groupId>
         <artifactId>spring-jdbc</artifactId>
         <version>${spring.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>org.flywaydb</groupId>

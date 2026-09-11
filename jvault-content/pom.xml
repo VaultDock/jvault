@@ -49,4 +49,27 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        The in-memory repositories in src/test are reproductions of contract properties the real
+        adapters get from database constraints. Publishing them as a test-jar lets downstream
+        modules reuse them rather than growing a third divergent copy — and a fake that drifts
+        from the contract is worse than no fake at all.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.4.2</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
