@@ -17,6 +17,7 @@
   <modules>
     <module>jvault-domain</module>
     <module>jvault-jira</module>
+    <module>jvault-outbox</module>
   </modules>
 
   <properties>

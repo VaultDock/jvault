@@ -67,16 +67,17 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 68 tests, all green.
+Java 21, Maven multi-module. `mvn test` — 132 tests, all green.
 
 | Module | Contains | State |
 |---|---|---|
 | `jvault-domain` | Placement policy engine, `SensitiveValue`, surrogate rendering | **Done for MVP scope** |
-| `jvault-jira` | Egress guard, `JiraSafePayload`, gateway interfaces, architecture rules | **Boundary done**; transport not started |
+| `jvault-jira` | Egress guard, `JiraSafePayload`, gateway and search ports, architecture rules | **Boundary done**; transport not started |
+| `jvault-outbox` | Outbox, per-issue dispatcher lanes, backoff, rate limiting, ambiguity protocol | **Done for MVP scope**; PostgreSQL adapter not started |
 
-Built first, deliberately, because these are the two things
-[15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit —
-and neither depends on the unanswered Q0 connectivity question.
+Built in this order deliberately: these are the pieces
+[15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
+and none of them depends on the unanswered Q0 connectivity question.
 
 ### What is guaranteed so far, and by what
 
@@ -90,6 +91,11 @@ and neither depends on the unanswered Q0 connectivity question.
 | Only one place can reach Jira | ArchUnit: nothing outside `jira.gateway` may depend on `JiraHttpClient` |
 | Externalised content cannot reach Jira | `ContentHashIndex` — whole-value hash, literal containment, word shingles, all after Unicode/case/whitespace normalisation |
 | Failure paths carry no content | `EgressViolation` has no field capable of holding content; canary tests assert its absence in messages, violations and payload `toString` |
+| Jira's per-issue write limit is never breached | Entries are grouped into `issueLane`s and each lane runs one-at-a-time; `PerIssueRateLimiter` uses sliding windows, so the boundary burst a fixed window would allow cannot happen |
+| Effects within a ticket cannot overtake each other | A lane stops at its first failure or deferral and returns the rest to the queue |
+| A throttle never exhausts the retry budget | Attempts are consumed at the start of a try and refunded on 429; `Retry-After` is a floor on the next attempt, never a replacement for backoff |
+| A leak is never retried | An egress violation abandons the entry — retrying a leak is still a leak — and the gateway is never reached |
+| An ambiguous creation is never guessed | The entry is held `IN_FLIGHT`; `AmbiguityResolver` adopts on a correlation-property match, falls back to a flagged summary heuristic, and hands indistinguishable candidates to an operator |
 
 ### Known limits of what is built
 
@@ -103,12 +109,23 @@ and neither depends on the unanswered Q0 connectivity question.
   detections annotate without blocking.
 - **`SPLIT` placement is modelled but not implemented.** Section extraction arrives with the ADF
   codec.
-- **No transport yet.** `JiraHttpClient` and `JiraWriteGateway` are interfaces with no
-  implementation, which is why the boundary can be tested without a Jira instance.
+- **No transport and no database yet.** `JiraHttpClient`, `JiraWriteGateway`, `JiraIssueSearch`
+  and `OutboxRepository` are ports with no production adapter. That is why the entire dispatch
+  path — lanes, backoff, rate limiting, egress, ambiguity — is testable without a Jira instance
+  or a running Postgres, and it is worth keeping that property.
+- **The in-memory `OutboxRepository` reproduces two contract properties that matter**: `append`
+  is idempotent on `(ticketRef, effectKey)` and `claim` never hands the same entry to two callers.
+  The PostgreSQL adapter gets these from a unique constraint and `FOR UPDATE SKIP LOCKED`; a fake
+  without them would let tests pass while the real system double-wrote to Jira.
+- **Lanes are processed sequentially within one dispatcher pass.** They are independent and
+  designed to be the unit of parallelism, but nothing runs them in parallel yet.
 
 ### Next
 
-Per [15. Implementation plan](docs/15-implementation-plan.md), in order: the outbox and its
-per-issue dispatcher lanes with the ambiguity protocol, then `ContentStore` + `CryptoService`
-against the filesystem backend and a local key manager, then the two `JiraDeployment`
-implementations.
+Per [15. Implementation plan](docs/15-implementation-plan.md), in order: `ContentStore` +
+`CryptoService` against the filesystem backend and a local key manager, then the PostgreSQL
+adapter for the outbox, then the two `JiraDeployment` implementations.
+
+**Q0 becomes blocking at the third of those.** Whether the deployment can reach
+`auth.atlassian.com` through a proxy or is genuinely air-gapped decides whether the Jira Cloud
+implementation is built at all.
