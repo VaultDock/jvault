@@ -36,6 +36,7 @@
     <mssql.version>12.8.1.jre11</mssql.version>
     <ojdbc.version>23.5.0.24.07</ojdbc.version>
     <testcontainers.version>1.20.4</testcontainers.version>
+    <spring.version>6.1.14</spring.version>
   </properties>
 
   <dependencyManagement>
@@ -71,6 +72,11 @@
         <groupId>org.flywaydb</groupId>
         <artifactId>flyway-core</artifactId>
         <version>${flyway.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-jdbc</artifactId>
+        <version>${spring.version}</version>
       </dependency>
       <dependency>
         <groupId>org.flywaydb</groupId>

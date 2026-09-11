@@ -4,6 +4,8 @@ import dev.jvault.jira.egress.JiraOperation;
 import dev.jvault.outbox.OutboxEntry;
 import dev.jvault.outbox.OutboxState;
 
+import org.springframework.jdbc.core.RowMapper;
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -77,6 +79,11 @@ public final class OutboxRowMapper {
                 rs.getString("last_error_code"),
                 instant(rs.getTimestamp("attempt_started_at")),
                 instant(rs.getTimestamp("created_at")));
+    }
+
+    /** Spring row mapper over {@link #map}, so the mapping exists in exactly one place. */
+    public static RowMapper<OutboxEntry> rowMapper() {
+        return (rs, rowNum) -> map(rs);
     }
 
     public static List<OutboxEntry> mapAll(ResultSet rs) throws SQLException {

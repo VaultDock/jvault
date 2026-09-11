@@ -1,21 +1,16 @@
 package dev.jvault.persistence.dialect;
 
 import dev.jvault.outbox.OutboxEntry;
+import dev.jvault.persistence.OutboxRowMapper;
 import dev.jvault.persistence.SqlDialect;
+import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 
-import static dev.jvault.persistence.OutboxRowMapper.columns;
-import static dev.jvault.persistence.OutboxRowMapper.mapAll;
-import static dev.jvault.persistence.OutboxRowMapper.timestamp;
-
 /**
- * PostgreSQL. The dialect this repository verifies against a real engine.
+ * PostgreSQL.
  *
  * <p>The claim is a single statement: an inner select takes the lock with
  * {@code FOR UPDATE SKIP LOCKED} and the outer update marks and returns the rows. Note the clause
@@ -23,9 +18,6 @@ import static dev.jvault.persistence.OutboxRowMapper.timestamp;
  * way round is a syntax error rather than a subtle bug, which is a small mercy.
  */
 public final class PostgresDialect implements SqlDialect {
-
-    /** 23505 is the SQL-standard code for a unique violation, which PostgreSQL reports faithfully. */
-    private static final String UNIQUE_VIOLATION = "23505";
 
     private final String claimSql;
 
@@ -40,7 +32,7 @@ public final class PostgresDialect implements SqlDialect {
                     LIMIT ?
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING """ + columns();
+                RETURNING """ + OutboxRowMapper.columns();
     }
 
     @Override
@@ -49,20 +41,8 @@ public final class PostgresDialect implements SqlDialect {
     }
 
     @Override
-    public List<OutboxEntry> claimDue(Connection connection, int limit, Instant now)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(claimSql)) {
-            statement.setTimestamp(1, timestamp(now));
-            statement.setInt(2, limit);
-            try (ResultSet rs = statement.executeQuery()) {
-                return mapAll(rs);
-            }
-        }
-    }
-
-    @Override
-    public boolean isUniqueViolation(SQLException e) {
-        return UNIQUE_VIOLATION.equals(e.getSQLState());
+    public List<OutboxEntry> claimDue(JdbcTemplate jdbc, int limit, Instant now) {
+        return jdbc.query(claimSql, OutboxRowMapper.rowMapper(), Timestamp.from(now), limit);
     }
 
     @Override

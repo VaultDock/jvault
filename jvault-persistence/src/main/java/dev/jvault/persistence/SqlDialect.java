@@ -1,9 +1,8 @@
 package dev.jvault.persistence;
 
 import dev.jvault.outbox.OutboxEntry;
+import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 
@@ -44,19 +43,9 @@ public interface SqlDialect {
      *       n rows locks only those n. Two statements, one transaction.</li>
      * </ul>
      *
-     * <p>The caller manages the transaction. The connection must not be in auto-commit.
+     * <p>The caller supplies the transaction; Oracle's two-statement form depends on it.
      */
-    List<OutboxEntry> claimDue(Connection connection, int limit, Instant now) throws SQLException;
-
-    /**
-     * Whether this exception is the unique constraint firing.
-     *
-     * <p>Used to make {@code append} idempotent on {@code (ticket_ref, effect_key)} without
-     * {@code ON CONFLICT}, {@code MERGE}, or a read-then-write race. JDBC standardises the
-     * exception type, so this is mostly portable already — but SQL Server reports duplicate-key
-     * through vendor codes that do not always map cleanly, so the dialect gets the final say.
-     */
-    boolean isUniqueViolation(SQLException e);
+    List<OutboxEntry> claimDue(JdbcTemplate jdbc, int limit, Instant now);
 
     /** Classpath location of this engine's migrations. */
     default String migrationLocation() {

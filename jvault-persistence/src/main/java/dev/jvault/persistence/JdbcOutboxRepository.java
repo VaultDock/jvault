@@ -2,13 +2,13 @@ package dev.jvault.persistence;
 
 import dev.jvault.outbox.OutboxEntry;
 import dev.jvault.outbox.OutboxRepository;
-import dev.jvault.outbox.OutboxState;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -16,23 +16,25 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * JDBC implementation of the outbox, across all three supported engines.
+ * The outbox on Spring JDBC, across all three supported engines.
+ *
+ * <p>Spring JDBC rather than jOOQ: jOOQ's Open Source Edition is licensed for open-source
+ * databases only, and decision D5 puts Oracle and SQL Server in scope. Beyond the licence, the
+ * choice suits this class — Spring JDBC does not attempt to generate the dequeue SQL, which is
+ * exactly the part that must stay readable, while its exception translation removes the
+ * per-dialect duplicate-key detection that would otherwise be hand-written three times.
  *
  * <p>Two contract properties from {@link OutboxRepository} are provided here rather than assumed,
  * because the whole dispatcher rests on them:
  *
  * <ul>
  *   <li><strong>{@code append} is idempotent</strong> on {@code (ticket_ref, effect_key)}. The
- *       unique constraint is the mechanism and the duplicate-key exception is the signal — not a
+ *       unique constraint is the mechanism and the integrity violation is the signal — not a
  *       read-then-write check, which would race between two nodes enqueuing the same effect.</li>
  *   <li><strong>{@code claim} never hands one row to two workers.</strong> Delegated to
  *       {@link SqlDialect#claimDue}, because the skip-locked semantics differ per engine and are
  *       the one thing that must not be abstracted away.</li>
  * </ul>
- *
- * <p>Plain JDBC, deliberately. The outbox is six statements and its correctness lives in their
- * exact locking behaviour; a mapping framework would add indirection over precisely the part that
- * needs to stay readable.
  */
 public final class JdbcOutboxRepository implements OutboxRepository {
 
@@ -49,15 +51,23 @@ public final class JdbcOutboxRepository implements OutboxRepository {
                 last_error_code = ?, attempt_started_at = ?
             WHERE id = ?""";
 
-    private final DataSource dataSource;
+    private static final String RELEASE_STALE_CLAIMS = """
+            UPDATE jira_outbox SET state = 'PENDING'
+            WHERE state = 'CLAIMED' AND created_at < ?""";
+
+    private final JdbcTemplate jdbc;
+    private final TransactionTemplate transactions;
     private final SqlDialect dialect;
     private final String selectById;
     private final String selectByEffect;
     private final String selectInFlight;
 
     public JdbcOutboxRepository(DataSource dataSource, SqlDialect dialect) {
-        this.dataSource = Objects.requireNonNull(dataSource, "dataSource");
+        Objects.requireNonNull(dataSource, "dataSource");
         this.dialect = Objects.requireNonNull(dialect, "dialect");
+        this.jdbc = new JdbcTemplate(dataSource);
+        this.transactions = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+
         String columns = OutboxRowMapper.columns();
         this.selectById = "SELECT " + columns + " FROM jira_outbox WHERE id = ?";
         this.selectByEffect =
@@ -68,24 +78,34 @@ public final class JdbcOutboxRepository implements OutboxRepository {
 
     @Override
     public OutboxEntry append(OutboxEntry entry) {
-        try (Connection connection = dataSource.getConnection()) {
-            try (PreparedStatement statement = connection.prepareStatement(INSERT)) {
-                bindInsert(statement, entry);
-                statement.executeUpdate();
-                return entry;
-            } catch (SQLException e) {
-                if (!dialect.isUniqueViolation(e)) {
-                    throw e;
-                }
-                // Already enqueued. Returning the existing row makes enqueueing safe to repeat,
-                // which is what lets callers retry without tracking what they already sent.
-                return findByEffect(entry.ticketRef(), entry.effectKey())
-                        .orElseThrow(() -> new PersistenceException(
-                                "unique violation on (" + entry.ticketRef() + ", "
-                                        + entry.effectKey() + ") but no row found", e));
-            }
-        } catch (SQLException e) {
-            throw new PersistenceException("could not append outbox entry", e);
+        try {
+            jdbc.update(INSERT,
+                    entry.id().toString(),
+                    entry.ticketRef(),
+                    entry.deploymentId(),
+                    entry.issueLane(),
+                    entry.operation().name(),
+                    entry.effectKey(),
+                    OutboxRowMapper.encodePayloadRef(entry.payloadRef()),
+                    entry.identityRef(),
+                    entry.state().name(),
+                    entry.attempts(),
+                    Timestamp.from(entry.nextAttemptAt()),
+                    entry.lastErrorCode(),
+                    OutboxRowMapper.timestamp(entry.attemptStartedAt()),
+                    Timestamp.from(entry.createdAt()));
+            return entry;
+
+        } catch (DataIntegrityViolationException e) {
+            // Deliberately the broad type rather than DuplicateKeyException. Whether a duplicate
+            // key surfaces as the narrower subclass depends on the vendor's error codes, and
+            // relying on that mapping across three engines would be a subtle portability bug.
+            // Re-reading is the definitive test: if the effect is already enqueued, return it.
+            return findByEffect(entry.ticketRef(), entry.effectKey())
+                    .orElseThrow(() -> new PersistenceException(
+                            "integrity violation appending effect '" + entry.effectKey()
+                                    + "' for ticket " + entry.ticketRef()
+                                    + ", and no existing row explains it", e));
         }
     }
 
@@ -94,124 +114,54 @@ public final class JdbcOutboxRepository implements OutboxRepository {
         if (limit <= 0) {
             return List.of();
         }
-        try (Connection connection = dataSource.getConnection()) {
-            boolean autoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                List<OutboxEntry> claimed = dialect.claimDue(connection, limit, now);
-                connection.commit();
-                return claimed;
-            } catch (SQLException | RuntimeException e) {
-                connection.rollback();
-                throw e;
-            } finally {
-                connection.setAutoCommit(autoCommit);
-            }
-        } catch (SQLException e) {
-            throw new PersistenceException("could not claim outbox entries", e);
-        }
+        // The transaction is part of the contract, not an optimisation: Oracle's claim is two
+        // statements and its row locks must be held across both.
+        return transactions.execute(status -> dialect.claimDue(jdbc, limit, now));
     }
 
     @Override
     public void save(OutboxEntry entry) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(UPDATE)) {
-            statement.setString(1, entry.issueLane());
-            statement.setString(2, entry.state().name());
-            statement.setInt(3, entry.attempts());
-            statement.setTimestamp(4, OutboxRowMapper.timestamp(entry.nextAttemptAt()));
-            statement.setString(5, entry.lastErrorCode());
-            statement.setTimestamp(6, OutboxRowMapper.timestamp(entry.attemptStartedAt()));
-            statement.setString(7, entry.id().toString());
+        int updated = jdbc.update(UPDATE,
+                entry.issueLane(),
+                entry.state().name(),
+                entry.attempts(),
+                Timestamp.from(entry.nextAttemptAt()),
+                entry.lastErrorCode(),
+                OutboxRowMapper.timestamp(entry.attemptStartedAt()),
+                entry.id().toString());
 
-            if (statement.executeUpdate() == 0) {
-                throw new PersistenceException("no outbox entry with id " + entry.id(), null);
-            }
-        } catch (SQLException e) {
-            throw new PersistenceException("could not save outbox entry " + entry.id(), e);
+        if (updated == 0) {
+            throw new PersistenceException("no outbox entry with id " + entry.id(), null);
         }
     }
 
     @Override
     public Optional<OutboxEntry> find(UUID id) {
-        return queryOne(selectById, statement -> statement.setString(1, id.toString()));
+        return jdbc.query(selectById, OutboxRowMapper.rowMapper(), id.toString())
+                .stream().findFirst();
     }
 
     @Override
     public Optional<OutboxEntry> findByEffect(String ticketRef, String effectKey) {
-        return queryOne(selectByEffect, statement -> {
-            statement.setString(1, ticketRef);
-            statement.setString(2, effectKey);
-        });
+        return jdbc.query(selectByEffect, OutboxRowMapper.rowMapper(), ticketRef, effectKey)
+                .stream().findFirst();
     }
 
     @Override
     public List<OutboxEntry> findInFlightOlderThan(Instant threshold) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(selectInFlight)) {
-            statement.setTimestamp(1, OutboxRowMapper.timestamp(threshold));
-            try (ResultSet rs = statement.executeQuery()) {
-                return OutboxRowMapper.mapAll(rs);
-            }
-        } catch (SQLException e) {
-            throw new PersistenceException("could not read in-flight entries", e);
-        }
+        return jdbc.query(selectInFlight, OutboxRowMapper.rowMapper(), Timestamp.from(threshold));
     }
 
     @Override
     public int releaseStaleClaims(Instant claimedBefore) {
         // A dispatcher that died holding claims leaves rows CLAIMED with nothing working on them.
         // They are safe to release: CLAIMED means selected but not yet sent to Jira, so no
-        // external effect can have happened. IN_FLIGHT is the state that is never auto-released,
-        // because there the request may already have reached Jira.
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement("""
-                     UPDATE jira_outbox SET state = 'PENDING'
-                     WHERE state = 'CLAIMED' AND created_at < ?""")) {
-            statement.setTimestamp(1, OutboxRowMapper.timestamp(claimedBefore));
-            return statement.executeUpdate();
-        } catch (SQLException e) {
-            throw new PersistenceException("could not release stale claims", e);
-        }
+        // external effect can have happened. IN_FLIGHT is never auto-released, because there the
+        // request may already have reached Jira — that call belongs to the ambiguity resolver.
+        return jdbc.update(RELEASE_STALE_CLAIMS, Timestamp.from(claimedBefore));
     }
 
-    private Optional<OutboxEntry> queryOne(String sql, StatementBinder binder) {
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            binder.bind(statement);
-            try (ResultSet rs = statement.executeQuery()) {
-                return rs.next() ? Optional.of(OutboxRowMapper.map(rs)) : Optional.empty();
-            }
-        } catch (SQLException e) {
-            throw new PersistenceException("query failed", e);
-        }
-    }
-
-    private static void bindInsert(PreparedStatement statement, OutboxEntry entry)
-            throws SQLException {
-        statement.setString(1, entry.id().toString());
-        statement.setString(2, entry.ticketRef());
-        statement.setString(3, entry.deploymentId());
-        statement.setString(4, entry.issueLane());
-        statement.setString(5, entry.operation().name());
-        statement.setString(6, entry.effectKey());
-        statement.setString(7, OutboxRowMapper.encodePayloadRef(entry.payloadRef()));
-        statement.setString(8, entry.identityRef());
-        statement.setString(9, entry.state().name());
-        statement.setInt(10, entry.attempts());
-        statement.setTimestamp(11, OutboxRowMapper.timestamp(entry.nextAttemptAt()));
-        statement.setString(12, entry.lastErrorCode());
-        statement.setTimestamp(13, OutboxRowMapper.timestamp(entry.attemptStartedAt()));
-        statement.setTimestamp(14, OutboxRowMapper.timestamp(entry.createdAt()));
-    }
-
-    /** States a claim may take an entry from, kept beside the SQL that names them. */
-    static boolean isClaimable(OutboxState state) {
-        return state.isClaimable();
-    }
-
-    @FunctionalInterface
-    private interface StatementBinder {
-        void bind(PreparedStatement statement) throws SQLException;
+    public SqlDialect dialect() {
+        return dialect;
     }
 }

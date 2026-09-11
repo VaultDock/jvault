@@ -127,11 +127,28 @@ several load-bearing places. Each now needs a portable answer or a per-vendor on
 | **Audit partitioning** | Declarative range partitioning | All three partition, all three differently. Left to the deployment's DBA with a documented recommendation rather than baked into a migration. |
 | **Migrations** | One Flyway script set | Per-vendor migration directories. One logical schema, three physical scripts, with a test asserting they stay in step. |
 
-**Shape of the answer.** A `SqlDialect` abstraction with three implementations. Everything that
-is genuinely portable stays in shared code; the handful of statements that cannot be are named,
-isolated, and individually tested. The alternative — an ORM or a query builder papering over the
-differences — would hide exactly the dequeue semantics this system depends on for correctness,
-which is the one thing that must not be hidden.
+**Shape of the answer.** A `SqlDialect` abstraction with three implementations, over **Spring
+JDBC**. Everything genuinely portable stays in shared code; the handful of statements that cannot
+be are named, isolated, and individually tested.
+
+**Why not jOOQ.** jOOQ is the better multi-dialect SQL library on the merits, and it does render
+`FOR UPDATE SKIP LOCKED` per dialect — including SQL Server's `UPDLOCK, READPAST` emulation. But
+its Open Source Edition is Apache-2.0 *only for open-source databases*; Oracle and SQL Server
+require a commercial licence
+([jooq.org/legal/licensing](https://www.jooq.org/legal/licensing)), and this decision puts both in
+scope. Adopting it would mean buying jOOQ Professional or Enterprise. That is a reasonable thing
+to do — it is a good product and the licence is modest next to Oracle's — but it is a purchasing
+decision, not an engineering one, so it is recorded here rather than made silently.
+
+Spring JDBC carries the same licence as the rest of the stack, costs nothing per engine, and is
+already what the architecture commits to — so it introduces no second data-access idiom. It also
+does **not** attempt to generate the dequeue SQL, which is a feature here rather than a
+limitation: an ORM or query builder papering over the differences would hide exactly the
+skip-locked semantics correctness depends on. Its exception translation is a genuine saving,
+removing the per-dialect duplicate-key detection we would otherwise hand-write three times.
+
+**If the licence is bought later**, the migration is contained: `SqlDialect` has one method whose
+implementations would change, and the row mapper and schema stay as they are.
 
 **Verification burden, stated plainly.** Three databases means three times the integration
 testing, and the two commercial engines need licensed images that cannot run in every CI

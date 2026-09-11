@@ -1,19 +1,13 @@
 package dev.jvault.persistence.dialect;
 
 import dev.jvault.outbox.OutboxEntry;
+import dev.jvault.persistence.OutboxRowMapper;
 import dev.jvault.persistence.SqlDialect;
+import org.springframework.jdbc.core.JdbcTemplate;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
-
-import static dev.jvault.persistence.OutboxRowMapper.mapAll;
-import static dev.jvault.persistence.OutboxRowMapper.outputColumns;
-import static dev.jvault.persistence.OutboxRowMapper.timestamp;
 
 /**
  * Microsoft SQL Server.
@@ -35,9 +29,6 @@ import static dev.jvault.persistence.OutboxRowMapper.timestamp;
  */
 public final class SqlServerDialect implements SqlDialect {
 
-    /** 2627 is a primary key or unique constraint; 2601 is a unique index. Both mean the same here. */
-    private static final Set<Integer> UNIQUE_VIOLATION_CODES = Set.of(2627, 2601);
-
     private final String claimSql;
 
     public SqlServerDialect() {
@@ -50,7 +41,7 @@ public final class SqlServerDialect implements SqlDialect {
                     ORDER BY created_at
                 )
                 UPDATE due SET state = 'CLAIMED'
-                OUTPUT """ + outputColumns("inserted");
+                OUTPUT """ + OutboxRowMapper.outputColumns("inserted");
     }
 
     @Override
@@ -59,25 +50,8 @@ public final class SqlServerDialect implements SqlDialect {
     }
 
     @Override
-    public List<OutboxEntry> claimDue(Connection connection, int limit, Instant now)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(claimSql)) {
-            statement.setInt(1, limit);
-            statement.setTimestamp(2, timestamp(now));
-            try (ResultSet rs = statement.executeQuery()) {
-                return mapAll(rs);
-            }
-        }
-    }
-
-    @Override
-    public boolean isUniqueViolation(SQLException e) {
-        if (e instanceof java.sql.SQLIntegrityConstraintViolationException) {
-            return true;
-        }
-        // SQL Server reports duplicate keys with SQLState 23000 and a vendor code, so the
-        // vendor code is what actually distinguishes a duplicate from other integrity failures.
-        return UNIQUE_VIOLATION_CODES.contains(e.getErrorCode());
+    public List<OutboxEntry> claimDue(JdbcTemplate jdbc, int limit, Instant now) {
+        return jdbc.query(claimSql, OutboxRowMapper.rowMapper(), limit, Timestamp.from(now));
     }
 
     @Override

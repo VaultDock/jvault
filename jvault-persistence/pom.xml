@@ -26,6 +26,19 @@
       <groupId>com.zaxxer</groupId>
       <artifactId>HikariCP</artifactId>
     </dependency>
+    <!--
+      Spring JDBC rather than jOOQ. jOOQ is the better multi-dialect SQL library on the merits,
+      but its Open Source Edition is Apache-2.0 only for open-source databases: Oracle and SQL
+      Server require a commercial licence (jooq.org/legal/licensing), and decision D5 puts both
+      in scope. Spring JDBC carries the same licence as the rest of the stack, costs nothing per
+      engine, and — importantly — does not try to generate the dequeue SQL, which is the one
+      thing that must stay visible. Its exception translation also removes the per-dialect
+      duplicate-key detection we would otherwise hand-write three times.
+    -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-jdbc</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-core</artifactId>
