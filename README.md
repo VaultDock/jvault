@@ -67,13 +67,15 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 132 tests, all green.
+Java 21, Maven multi-module. `mvn test` — 186 tests, all green.
 
 | Module | Contains | State |
 |---|---|---|
 | `jvault-domain` | Placement policy engine, `SensitiveValue`, surrogate rendering | **Done for MVP scope** |
 | `jvault-jira` | Egress guard, `JiraSafePayload`, gateway and search ports, architecture rules | **Boundary done**; transport not started |
 | `jvault-outbox` | Outbox, per-issue dispatcher lanes, backoff, rate limiting, ambiguity protocol | **Done for MVP scope**; PostgreSQL adapter not started |
+| `jvault-crypto` | Envelope encryption, KMS port, self-describing object header, key rotation | **Done for MVP scope**; Vault Transit and PKCS#11 adapters not started |
+| `jvault-storage` | `ContentStore` SPI, capability negotiation, filesystem backend | **Filesystem done**; CMIS and S3 not started |
 
 Built in this order deliberately: these are the pieces
 [15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
@@ -96,6 +98,11 @@ and none of them depends on the unanswered Q0 connectivity question.
 | A throttle never exhausts the retry budget | Attempts are consumed at the start of a try and refunded on 429; `Retry-After` is a floor on the next attempt, never a replacement for backoff |
 | A leak is never retried | An egress violation abandons the entry — retrying a leak is still a leak — and the gateway is never reached |
 | An ambiguous creation is never guessed | The entry is held `IN_FLIGHT`; `AmbiguityResolver` adopts on a correlation-property match, falls back to a flagged summary heuristic, and hands indistinguishable candidates to an operator |
+| A storage credential alone yields nothing | Content is encrypted before it reaches any `ContentStore`; an end-to-end test reads the raw file off disk and asserts the plaintext, the filename and the host are all absent |
+| Storage keys carry no content | `ObjectKey` rejects any component that is not an opaque identifier, so a filename cannot reach a key even by accident |
+| Tampering with stored bytes is detected | Tink binds frame index and the final-frame flag into each nonce; jvault binds object identity and the header hash into the AAD. Bit flips, truncation, frame reordering, cross-object splicing and object substitution all fail to authenticate |
+| Nothing is ever stored unencrypted | A key-manager outage fails the write closed; a test asserts not a byte is emitted |
+| KEK rotation does not rewrite content | Rewrap updates the database; the object is untouched. A test rotates a ring, shows the header's now-stale key failing, and the rewrapped key opening the very same bytes |
 
 ### Known limits of what is built
 
@@ -109,6 +116,13 @@ and none of them depends on the unanswered Q0 connectivity question.
   detections annotate without blocking.
 - **`SPLIT` placement is modelled but not implemented.** Section extraction arrives with the ADF
   codec.
+- **`LocalKeyManagementService` is development-only** and says so in its own javadoc: its
+  key-encryption keys live in the same heap as the plaintext they protect, which defeats the
+  separation that makes envelope encryption worth doing. It exists so the whole content path is
+  exercisable in a unit test with no external dependency — a suite that needs a running Vault to
+  check a round-trip stops being run. Production is Vault Transit or PKCS#11 (D2), not started.
+- **Ranged reads authenticate only the frames they touch** and cannot verify the whole-object
+  plaintext digest. Any API exposing them must say so.
 - **No transport and no database yet.** `JiraHttpClient`, `JiraWriteGateway`, `JiraIssueSearch`
   and `OutboxRepository` are ports with no production adapter. That is why the entire dispatch
   path — lanes, backoff, rate limiting, egress, ambiguity — is testable without a Jira instance
@@ -122,9 +136,9 @@ and none of them depends on the unanswered Q0 connectivity question.
 
 ### Next
 
-Per [15. Implementation plan](docs/15-implementation-plan.md), in order: `ContentStore` +
-`CryptoService` against the filesystem backend and a local key manager, then the PostgreSQL
-adapter for the outbox, then the two `JiraDeployment` implementations.
+Per [15. Implementation plan](docs/15-implementation-plan.md), in order: the PostgreSQL adapter
+for the outbox and the content metadata schema, then the S3-compatible and CMIS backends, then the
+two `JiraDeployment` implementations.
 
 **Q0 becomes blocking at the third of those.** Whether the deployment can reach
 `auth.atlassian.com` through a proxy or is genuinely air-gapped decides whether the Jira Cloud

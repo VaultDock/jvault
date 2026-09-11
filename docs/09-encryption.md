@@ -46,8 +46,8 @@ Per object version:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ magic "JVLT" │ fmt ver │ alg id │ frame size │ KEK id        │  header (authenticated)
-│ wrapped DEK  │ header MAC                                    │
+│ magic "JVLT" │ fmt ver │ alg id │ frame size │ KEK id        │  header (authenticated
+│ wrapped DEK                                                  │   via AAD, see below)
 ├──────────────────────────────────────────────────────────────┤
 │ frame 0: nonce ‖ ciphertext ‖ tag                            │
 │ frame 1: nonce ‖ ciphertext ‖ tag                            │
@@ -62,26 +62,38 @@ object before releasing any of it — impossible for 1 GB files — or you emit 
 plaintext and hope. Framing lets us authenticate and release 1 MiB at a time, and it makes range
 reads possible (decrypt only the frames the range touches).
 
-**Frame AAD binds each frame to its position and its object:**
+**Two bindings, at different layers.** Frame position is bound by the library; object identity is
+bound by us.
 
 ```
-AAD = contentRef ‖ versionId ‖ frameIndex ‖ isFinalFrame ‖ headerHash
+per-frame nonce  ← frame index and final-frame flag   (Tink, internal)
+AAD              = contentRef ‖ 0x00 ‖ versionId ‖ 0x00 ‖ SHA-256(header)
 ```
 
-This is what prevents an attacker with write access to the bucket from reordering frames,
-duplicating one, truncating the object, or splicing frames from a different object — all of which
-are undetectable with per-frame GCM and no AAD. The final-frame flag is the truncation defence.
+Tink's `AesGcmHkdfStreaming` derives a per-segment key by HKDF and encodes the segment index and
+a final-segment flag into each nonce, so frames cannot be reordered, duplicated or the object
+truncated without detection. Our AAD adds what the library cannot know: *which object this is*.
+Without it, someone with write access to the bucket could swap one object's bytes for another's
+and every frame would still authenticate — the cryptography intact, the system lying.
 
-**We do not implement this ourselves.** The AWS Encryption SDK for Java and Google Tink both
-provide framed, authenticated streaming encryption with AAD and key commitment, and both are
-audited. The header above describes what they produce; jvault configures one of them rather than
-writing frame logic. This is a deliberate decision to spend a dependency instead of a class of
-subtle, silent, catastrophic bugs.
+The header carries **no separate MAC**. Its SHA-256 is bound into the AAD instead, so altering the
+frame size, the key id, or the wrapped key makes every frame fail to authenticate. That is
+stronger than a header MAC: it uses the same key as the payload, so a header cannot be lifted onto
+a different object.
 
-**TO VERIFY (spike):** confirm the chosen library streams a 1 GB object through
-`ContentStore.put` with bounded heap and supports range-based partial decryption in the form our
-`open(ref, range)` needs. If range decryption is not supported cleanly, the fallback is
-sequential decryption with discard for ranged reads, which costs throughput but not correctness.
+**We do not implement the frame construction ourselves.** jvault uses **Google Tink**'s
+`subtle.AesGcmHkdfStreaming`, which takes a raw data key directly — composing cleanly with
+envelope encryption — and is audited. This is a deliberate decision to spend a dependency instead
+of a class of subtle, silent, catastrophic bugs.
+
+**Spike resolved (implementation).** Tink streams with bounded heap and provides
+`newSeekableDecryptingChannel`, which gives range-based partial decryption directly; the fallback
+of decrypt-and-discard is not needed. The envelope header is skipped by an offset view over the
+channel, so the object stays self-describing without disturbing the library's coordinate system.
+
+**One consequence worth stating.** A ranged read authenticates only the frames it touches and
+cannot verify the whole-object plaintext digest. Any API exposing ranged reads must say so — see
+[8.5](08-storage.md).
 
 ## 9.4 Key hierarchy
 
@@ -106,6 +118,13 @@ later relax the on-premises constraint but are **not used here**. The `KeyManage
 `describeKey` — which keeps the provider adapters small and testable.
 
 ## 9.5 Rotation
+
+**The stored header goes stale, and that is fine.** After a rewrap, the wrapped key inside the
+object still refers to the old KEK. The database is authoritative and the header is the
+disaster-recovery fallback, so the read path takes the wrapped key from `content_version` (a
+`KeyLocator` in the implementation) and uses the header's key only when recovering an object whose
+metadata row is gone. The header's *hash* is still bound into the AAD either way, so it stays
+authenticated even when its key field is stale.
 
 **KEK rotation** is the cheap one, and it is the point of envelope encryption: rotating a KEK
 requires re-wrapping data keys, not rewriting content. A rewrap job walks `content_version` in
