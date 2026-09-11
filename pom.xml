@@ -24,6 +24,7 @@
     <module>jvault-content</module>
     <module>jvault-ingest</module>
     <module>jvault-authz</module>
+    <module>jvault-api</module>
   </modules>
 
   <properties>
@@ -41,6 +42,7 @@
     <testcontainers.version>1.20.4</testcontainers.version>
     <spring.version>6.1.14</spring.version>
     <jackson.version>2.18.2</jackson.version>
+    <spring.boot.version>3.3.5</spring.boot.version>
   </properties>
 
   <dependencyManagement>
@@ -88,6 +90,13 @@
         <version>${jackson.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring.boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
         <groupId>org.flywaydb</groupId>
         <artifactId>flyway-database-postgresql</artifactId>
         <version>${flyway.version}</version>
@@ -128,6 +137,12 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.13.0</version>
           <configuration>
+            <!--
+              Retain parameter names in bytecode. Spring uses them to bind @PathVariable and
+              @RequestParam without repeating the name in the annotation; spring-boot-starter-parent
+              sets this for you, and this project has its own parent, so it sets it here.
+            -->
+            <parameters>true</parameters>
             <compilerArgs>
               <arg>-Xlint:all,-serial</arg>
             </compilerArgs>

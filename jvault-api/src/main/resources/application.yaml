@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: jvault-api
+  mvc:
+    problemdetails:
+      # RFC 9457 for framework-raised errors too, so a 405 and a validation failure have the same
+      # shape as everything else a client has to parse.
+      enabled: true
+  servlet:
+    multipart:
+      max-file-size: 1GB
+      max-request-size: 1GB
+
+server:
+  error:
+    # Never render a stack trace or a default error page: both are places where a message
+    # containing content could surface.
+    include-stacktrace: never
+    include-message: never
+    whitelabel:
+      enabled: false
+
+jvault:
+  jira:
+    connect-url: /api/v1/jira/connections/start
