@@ -6,3 +6,8 @@ target/
 .vscode/
 node_modules/
 dist/
+
+# Never commit credentials
+.env
+.env.*
+*.token

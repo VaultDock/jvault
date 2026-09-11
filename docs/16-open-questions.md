@@ -94,6 +94,11 @@ D1 and D2 together create a conflict: **Jira Cloud requires outbound access to
 The three readings and their consequences are set out in full in the
 [decision log](decisions.md#conflict-raised-by-d1--d2--needs-an-answer-before-phase-0-ends).
 
+**Partially answered on 2026-09-11:** a live Jira Cloud site was reached from a development
+machine with an API token, so reading (b) — a true air gap — now looks unlikely and the Cloud path
+is clearly wanted. What remains is whether the *production* on-premises deployment has the same
+allow-listed egress, and whether it needs a forward proxy.
+
 We are proceeding on reading **(a)** — on-premises data with allow-listed outbound HTTPS through a
 forward proxy — because it is the only reading in which both decisions hold. If the answer is
 **(b)**, truly air-gapped, then Jira Cloud is out, D1 collapses to Data Center only, and the MVP

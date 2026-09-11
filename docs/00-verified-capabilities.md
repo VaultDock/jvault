@@ -1,7 +1,11 @@
 # 0. Verified Jira capabilities
 
 Everything the design depends on, checked against Atlassian's own documentation in
-September 2026. Design recommendations are kept out of this document deliberately —
+September 2026, and — where marked **OBSERVED** — against a live Jira Cloud site
+(`*.atlassian.net`, team-managed project, 2026-09-11). Observed beats documented where the two
+disagree, and both are recorded so the difference stays visible.
+
+Everything below was checked Design recommendations are kept out of this document deliberately —
 if a claim is not here with a citation, it is not a capability claim.
 
 ## 0.1 Jira Cloud — OAuth 2.0 (3LO)
@@ -47,7 +51,26 @@ Three independent mechanisms apply simultaneously:
 
 Headers: `X-RateLimit-Remaining`, `X-RateLimit-NearLimit` (true below 20% capacity),
 `Retry-After` on 429, `RateLimit-Reason` naming the limit that fired
-(e.g. `jira-quota-global-based`, `jira-burst-based`). Atlassian's own guidance is
+(e.g. `jira-quota-global-based`, `jira-burst-based`).
+
+> **OBSERVED — richer than documented.** A live site returns structured
+> [IETF draft RateLimit](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/)
+> headers on **every** response, not only near the limit:
+>
+> ```
+> RateLimit-Policy: "jira-burst-based";q=100;w=1
+> RateLimit:        "jira-burst-based";r=348;t=1
+> X-RateLimit-Limit: 350
+> X-RateLimit-Remaining: 348
+> ```
+>
+> `r` is the remaining allowance and `t` the seconds until it resets. That is strictly more useful
+> than waiting for a 429: a client can pace itself from `r`/`t` and never be throttled at all.
+> Note also that `X-RateLimit-Limit` (350) and the policy's `q` (100 per 1 s window) are different
+> numbers describing different things — do not collapse them.
+>
+> **Consequence:** `JiraResponseClassifier` currently reads only `X-RateLimit-*` and
+> `Retry-After`. Parsing `RateLimit` would let the outbox slow down *before* being told to. Atlassian's own guidance is
 exponential backoff with jitter: 2 s base, doubling to ~30 s, jitter multiplier
 0.7–1.3, ~4 attempts, `Retry-After` as a floor.
 
@@ -92,6 +115,11 @@ The per-issue-type response carries the field metadata jvault needs to render a 
 removal date (2024-06-03) slipped and no replacement date has been published, but the
 deprecated form must not be used in new code.
 
+> **OBSERVED.** The deprecated aggregate form still returns `200` on a live site — it has not
+> been removed. The replacement endpoints work and return the documented shape. jvault uses only
+> the replacements, which remains correct; the point is that "it will 404 soon" is not yet true
+> and nothing should be timed around it.
+
 Sources: [Create Issue Meta Endpoint Deprecation](https://community.developer.atlassian.com/t/create-issue-meta-endpoint-deprecation/75413),
 [Issues API group](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/).
 
@@ -105,8 +133,12 @@ replaces the resource — fields not supplied are nulled.
 Sources: [Remote issue links (Cloud)](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-remote-links/),
 [Creating remote issue links (DC)](https://developer.atlassian.com/server/jira/platform/creating-remote-issue-links/).
 
+> **OBSERVED — verified empirically.** Posting the same `globalId` twice to a live site returns
+> `201` then `200`, and the issue ends with **one** remote link, not two. Upsert confirmed.
+
 **Consequence:** `globalId = "jvault:content:{contentRef}"` gives us a retry-safe,
-self-deduplicating link write. This is the primary link placement mechanism.
+self-deduplicating link write. This is the primary link placement mechanism, and the outbox can
+replay it freely.
 
 ## 0.7 Jira — attachments
 

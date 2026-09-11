@@ -171,6 +171,14 @@ Three readings, and they lead to different builds:
 | **(b) Truly air-gapped** | No outbound connectivity at all. | **Jira Cloud is impossible.** D1 collapses to Data Center only, which removes ADF, removes the Cloud auth path, and removes the Cloud service account — and makes the MVP *smaller*, not larger. |
 | **(c) Two separate installations** | One internet-connected installation integrating Jira Cloud, one air-gapped installation integrating Jira DC, sharing a codebase. | Both deployment implementations needed (as D1 says), plus a build that runs with no outbound egress at all and an offline-capable configuration path. Largest scope. |
 
+> **Evidence for (a), 2026-09-11.** A live Jira Cloud site was reached successfully from a
+> development machine using an Atlassian API token, at the user's direction. That does not prove
+> the *production* deployment has the same egress, but it settles that the Cloud path is wanted
+> and reachable in at least one environment. Reading (b), a true air gap, now looks unlikely.
+> **Still to confirm:** whether the production on-premises deployment has allow-listed egress to
+> `api.atlassian.com`, and whether it goes through a forward proxy — `CloudDeployment` already
+> takes a gateway base URL for that case.
+
 **Proceeding on (a)** until told otherwise, because it is the reading in which both stated
 decisions hold. If the answer is (b), tell us — it removes roughly four weeks of work rather than
 adding any.
