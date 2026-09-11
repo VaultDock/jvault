@@ -21,6 +21,7 @@
     <module>jvault-crypto</module>
     <module>jvault-storage</module>
     <module>jvault-persistence</module>
+    <module>jvault-content</module>
   </modules>
 
   <properties>

@@ -67,7 +67,7 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 199 tests green, 5 skipped.
+Java 21, Maven multi-module. `mvn test` — 212 tests green, 5 skipped.
 
 > **The 5 skipped are the PostgreSQL outbox integration tests.** They are wired into `mvn test`
 > and run wherever Testcontainers can reach Docker, but they did **not execute** on the machine
@@ -86,6 +86,7 @@ Java 21, Maven multi-module. `mvn test` — 199 tests green, 5 skipped.
 | `jvault-crypto` | Envelope encryption, KMS port, self-describing object header, key rotation | **Done for MVP scope**; Vault Transit and PKCS#11 adapters not started |
 | `jvault-storage` | `ContentStore` SPI, capability negotiation, filesystem backend | **Filesystem done**; CMIS and S3 not started |
 | `jvault-persistence` | Outbox JDBC adapter, three SQL dialects, per-vendor migrations | **PostgreSQL written, unrun here**; SQL Server and Oracle unverified |
+| `jvault-content` | Ticket creation, content service, surrogate rendering, payload assembler | **Create path done for MVP scope**; edit, comments and attachments not started |
 
 Built in this order deliberately: these are the pieces
 [15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
@@ -115,6 +116,8 @@ and none of them depends on the unanswered Q0 connectivity question.
 | KEK rotation does not rewrite content | Rewrap updates the database; the object is untouched. A test rotates a ring, shows the header's now-stale key failing, and the rewrapped key opening the very same bytes |
 | One logical schema across three engines | `MigrationParityTest` compares the column sets, the unique constraint and the indexes across all three migration scripts, so a column added to one and forgotten in another is a red build rather than a production incident |
 | An unproven dialect announces itself | `SqlDialect.verifiedByIntegrationTests()` is a claim about evidence, not aspiration; `DialectDetector.verificationNotice` warns at startup when an unverified dialect is selected |
+| **The whole path holds together** | `EndToEndTicketCreationTest` runs policy, encryption, filesystem storage, outbox and dispatcher with every real component except the Jira transport, and asserts the canary appears in none of: the Jira field map, the outbox rows, the bytes on disk, or the payload the gateway receives |
+| A replay creates nothing | The dedupe-key reservation is atomic; a second identical command returns the first ticket, stores no content and enqueues no effects |
 
 ### Known limits of what is built
 
