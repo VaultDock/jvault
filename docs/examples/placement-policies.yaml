@@ -1,0 +1,192 @@
+# Example placement policy set.
+# Resolution: most specific selector wins. Weights: field 16, partType 8, issueType 4,
+# project 2, deployment 1. Selector tuples are unique, so ties cannot occur.
+
+globalDefault:
+  placement: JIRA
+  classification: INTERNAL
+  storageRoute: null
+  encryption: { required: false }
+  allowOverride: false
+  # Deliberate: nothing leaves Jira unless an administrator opts a scope in.
+
+# On-premises per decision D2: S3-compatible object storage (MinIO / Ceph / StorageGRID)
+# reached at an internal endpoint, plus CMIS and filesystem routes.
+storageRoutes:
+  - name: obj-dc1-restricted
+    backend: minio-dc1
+    conditions: { classification: [RESTRICTED, SECRET] }
+    replicateTo: [minio-dc2]          # asynchronous copy to the second datacentre;
+                                      # there is no provider geo-replication to lean on
+  - name: obj-dc1-internal
+    backend: minio-dc1
+  - name: cmis-records
+    backend: cmis-records-mgmt
+    retention: { mode: RECORDS_MANAGED }   # the repository owns retention
+  - name: fs-airgap
+    backend: fs-local
+    conditions: { deployment: [jira-dc-airgap] }
+
+keyRings:
+  - name: sec-restricted
+    kms: { provider: VAULT_TRANSIT, mount: transit, key: jvault-sec-restricted }
+    rotation: { kekIntervalDays: 365, rewrapBatchSize: 5000 }
+  - name: general
+    kms: { provider: VAULT_TRANSIT, mount: transit, key: jvault-general }
+  - name: jira-tokens                  # separate ring: a content-key compromise must not yield Jira access
+    kms: { provider: VAULT_TRANSIT, mount: transit, key: jvault-jira-tokens }
+  - name: sec-hardware                 # hardware custody where the classification demands it
+    kms: { provider: PKCS11, library: /usr/lib/libCryptoki2_64.so, slot: 0, label: jvault-kek }
+
+policies:
+
+  # --- Whole project: everything sensitive leaves Jira -------------------------------
+  - id: sec-project-default
+    selector: { deployment: jira-cloud-prod, project: SEC }
+    placement: JIRA                    # project baseline stays in Jira …
+    classification: CONFIDENTIAL
+    storageRoute: obj-dc1-internal
+    encryption: { required: true, keyRing: general }
+    allowOverride: true                # … but users may push a field outward
+
+  - id: sec-incident-description
+    selector: { deployment: jira-cloud-prod, project: SEC, issueType: Incident,
+                partType: DESCRIPTION }
+    placement: EXTERNAL
+    classification: RESTRICTED
+    storageRoute: obj-dc1-restricted
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate:
+      kind: PLACEHOLDER
+      template: >-
+        Incident details are stored in jvault and are not visible in Jira.
+        Classification: {{classification}}. Open: {{link}}
+    linkPlacement: [DESCRIPTION_PLACEHOLDER, REMOTE_LINK]
+    allowOverride: false
+
+  - id: sec-incident-attachments
+    selector: { deployment: jira-cloud-prod, project: SEC, issueType: Incident,
+                partType: ATTACHMENT }
+    placement: EXTERNAL
+    classification: RESTRICTED
+    storageRoute: obj-dc1-restricted
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate:
+      kind: REDACTED
+      template: "Evidence file ({{sizeHuman}}, {{mediaType}}) — {{link}}"
+    linkPlacement: [REMOTE_LINK]
+    allowOverride: false
+
+  - id: sec-incident-comments
+    selector: { deployment: jira-cloud-prod, project: SEC, issueType: Incident,
+                partType: COMMENT }
+    placement: EXTERNAL
+    classification: RESTRICTED
+    storageRoute: obj-dc1-restricted
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate:
+      kind: PLACEHOLDER
+      template: "Comment stored in jvault — {{link}}"
+    linkPlacement: [COMMENT]           # the Jira comment itself carries the link
+    allowOverride: false
+
+  # Summary stays in Jira for this issue type: incident titles are operationally useful
+  # and the title convention is reviewed to be non-sensitive.
+  - id: sec-incident-summary
+    selector: { deployment: jira-cloud-prod, project: SEC, issueType: Incident,
+                partType: SUMMARY }
+    placement: JIRA
+    classification: INTERNAL
+    allowOverride: true
+
+  # --- HR: the title itself is sensitive ---------------------------------------------
+  - id: hr-case-summary
+    selector: { deployment: jira-cloud-prod, project: HR, partType: SUMMARY }
+    placement: EXTERNAL
+    classification: RESTRICTED
+    storageRoute: cmis-records
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate:
+      kind: PLACEHOLDER
+      template: "[{{classification}}] {{issueType}} {{ticketRefShort}} — details in jvault"
+      # No token here can interpolate the real title. See docs/05-content-placement.md §5.3.
+    linkPlacement: [REMOTE_LINK]
+    allowOverride: false
+
+  - id: hr-case-body
+    selector: { deployment: jira-cloud-prod, project: HR, partType: DESCRIPTION }
+    placement: EXTERNAL
+    classification: RESTRICTED
+    storageRoute: cmis-records
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate: { kind: PLACEHOLDER, template: "Case details in jvault: {{link}}" }
+    linkPlacement: [DESCRIPTION_PLACEHOLDER, REMOTE_LINK]
+    allowOverride: false
+
+  # --- A single custom field across a whole deployment --------------------------------
+  - id: any-customer-pii-field
+    selector: { deployment: jira-cloud-prod, field: customfield_10250 }   # "Customer record"
+    placement: EXTERNAL
+    classification: RESTRICTED
+    storageRoute: obj-dc1-restricted
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate: { kind: PLACEHOLDER, template: "Customer record in jvault: {{link}}" }
+    linkPlacement: [REMOTE_LINK]
+    allowOverride: false
+    # Weight 16+1 = 17, so this beats sec-project-default (2+1) and hr-case-body (2+8+1)
+    # wherever the field appears. Field-level intent is the strongest signal we have.
+
+  # --- Section-level split (release 2, ADF only) --------------------------------------
+  - id: eng-postmortem-split
+    selector: { deployment: jira-cloud-prod, project: ENG, issueType: Postmortem,
+                partType: DESCRIPTION }
+    placement: SPLIT
+    classification: CONFIDENTIAL
+    storageRoute: obj-dc1-internal
+    encryption: { required: true, keyRing: general }
+    sectionRule:
+      strategy: HEADING_SCOPE
+      headingPattern: '^(Customer impact|Affected accounts|Credentials rotated)\b'
+      levels: [2, 3]
+    surrogate:
+      kind: PLACEHOLDER
+      template: "This section is stored in jvault: {{link}}"
+    linkPlacement: [DESCRIPTION_PLACEHOLDER]
+    allowOverride: false
+
+  # --- Data Center deployment: SPLIT is refused at validation time --------------------
+  - id: dc-airgap-attachments
+    selector: { deployment: jira-dc-airgap, partType: ATTACHMENT }
+    placement: EXTERNAL
+    classification: SECRET
+    storageRoute: fs-airgap
+    encryption: { required: true, keyRing: sec-restricted }
+    surrogate: { kind: REDACTED, template: "Attachment held in jvault — {{link}}" }
+    linkPlacement: [REMOTE_LINK]
+    allowOverride: false
+
+spaces:
+  - space: { deployment: jira-cloud-prod, project: SEC }
+    jiraPermissionMode: INTERSECT       # secure default
+    degradedGraceSeconds: 0
+    defaultGrants:
+      - principal: { kind: GROUP, externalId: sec-incident-responders }
+        permissions: [VIEW, CREATE, EDIT, DOWNLOAD]
+      - principal: { kind: GROUP, externalId: sec-leads }
+        permissions: [VIEW, CREATE, EDIT, DELETE, DOWNLOAD, MANAGE_ACCESS]
+        canDelegate: true
+
+  - space: { deployment: jira-cloud-prod, project: HR }
+    jiraPermissionMode: VAULT_ONLY      # Jira browse is broad here; vault must not mirror it
+    degradedGraceSeconds: 0
+    requiresExplicitAcknowledgement: true
+    defaultGrants:
+      - principal: { kind: GROUP, externalId: hr-casework }
+        permissions: [VIEW, CREATE, EDIT, DOWNLOAD]
+
+  - space: { deployment: jira-cloud-prod, project: ENG }
+    jiraPermissionMode: INTERSECT
+    degradedGraceSeconds: 300           # engineering accepts a 5-minute stale-decision window
+    defaultGrants:
+      - principal: { kind: ROLE, externalId: eng-all }
+        permissions: [VIEW, CREATE, EDIT, DOWNLOAD]

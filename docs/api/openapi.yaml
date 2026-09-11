@@ -1,0 +1,511 @@
+# OpenAPI 3.1 outline for jvault. Abridged: representative paths and the shared
+# components that define the API's conventions. The authoritative document is
+# generated from the running application at /api/v1/openapi.json; CI diffs the two.
+openapi: 3.1.0
+info:
+  title: jvault API
+  version: 1.0.0
+  description: |
+    Create and manage Jira tickets while keeping configured parts of ticket content in
+    external, encrypted storage.
+
+    Conventions:
+      * Clients MUST ignore unknown response fields.
+      * All errors are application/problem+json (RFC 9457).
+      * Lists are cursor-paginated; offsets are not supported.
+      * Creating POSTs accept Idempotency-Key.
+servers:
+  - url: https://jvault.example.com/api/v1
+
+security:
+  - bearerAuth: []
+  - sessionCookie: []
+
+tags:
+  - name: metadata
+  - name: tickets
+  - name: comments
+  - name: attachments
+  - name: content
+  - name: permissions
+  - name: jira-connection
+  - name: ingestion
+  - name: admin
+
+paths:
+  /meta/projects/{projectKey}/issuetypes/{issueTypeId}/fields:
+    get:
+      tags: [metadata]
+      operationId: getCreateFields
+      summary: Field metadata for a create form, annotated with resolved placement
+      parameters:
+        - $ref: '#/components/parameters/ProjectKey'
+        - $ref: '#/components/parameters/IssueTypeId'
+      responses:
+        '200':
+          description: Field metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateFieldsResponse' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/JiraNotConnected' }
+
+  /tickets:
+    get:
+      tags: [tickets]
+      operationId: listTickets
+      parameters:
+        - { name: spaceId, in: query, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TicketPage' }
+    post:
+      tags: [tickets]
+      operationId: createTicket
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTicketRequest' }
+      responses:
+        '201':
+          description: Created and confirmed in Jira
+          headers:
+            ETag: { schema: { type: string } }
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+        '202':
+          description: Accepted; content stored, Jira write queued. Poll the status link.
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TicketStatus' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /tickets/{ticketRef}:
+    get:
+      tags: [tickets]
+      operationId: getTicket
+      parameters: [ { $ref: '#/components/parameters/TicketRef' } ]
+      responses:
+        '200':
+          headers: { ETag: { schema: { type: string } } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+        '404': { $ref: '#/components/responses/Problem' }
+    patch:
+      tags: [tickets]
+      operationId: updateTicket
+      parameters:
+        - $ref: '#/components/parameters/TicketRef'
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTicketRequest' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+        '412': { $ref: '#/components/responses/Problem' }
+
+  /tickets/{ticketRef}/comments:
+    post:
+      tags: [comments]
+      operationId: addComment
+      parameters:
+        - $ref: '#/components/parameters/TicketRef'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comment' }
+
+  /uploads:
+    post:
+      tags: [attachments]
+      operationId: beginUpload
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, sizeBytes, mediaType]
+              properties:
+                fileName:   { type: string, maxLength: 255 }
+                sizeBytes:  { type: integer, format: int64, minimum: 0 }
+                mediaType:  { type: string }
+                sha256:     { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadId:      { type: string }
+                  chunkSize:     { type: integer }
+                  expiresAt:     { type: string, format: date-time }
+
+  /content/{contentRef}:
+    get:
+      tags: [content]
+      operationId: getContentMetadata
+      parameters: [ { $ref: '#/components/parameters/ContentRef' } ]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentMetadata' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404':
+          description: |
+            Returned both when the reference does not exist and when the caller lacks VIEW on
+            the containing space, so that link probing cannot confirm existence.
+          $ref: '#/components/responses/Problem'
+
+  /content/{contentRef}/download:
+    get:
+      tags: [content]
+      operationId: downloadContent
+      description: |
+        Authorization is evaluated on every request, including range requests. The response is
+        always streamed from jvault; a storage URL or presigned link is never returned.
+      parameters:
+        - $ref: '#/components/parameters/ContentRef'
+        - { name: Range, in: header, schema: { type: string } }
+      responses:
+        '200': { $ref: '#/components/responses/ContentStream' }
+        '206': { $ref: '#/components/responses/ContentStream' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '410':
+          description: Content was purged; a tombstone is returned.
+          $ref: '#/components/responses/Problem'
+
+  /permissions/{scopeType}/{scopeId}/grants:
+    post:
+      tags: [permissions]
+      operationId: createGrant
+      description: |
+        The resulting grant is always a subset of the caller's own effective permissions on the
+        scope. Attempting to exceed them returns 422 grant-exceeds-authority.
+      parameters:
+        - { name: scopeType, in: path, required: true,
+            schema: { type: string, enum: [SPACE, TICKET, PART] } }
+        - { name: scopeId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrantInput' }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Grant' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /jira/connections/start:
+    post:
+      tags: [jira-connection]
+      operationId: startJiraConnection
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorizationUrl: { type: string, format: uri }
+                  expiresAt:        { type: string, format: date-time }
+
+  /ingestion/messages/{correlationId}:
+    get:
+      tags: [ingestion]
+      operationId: getIngestionStatus
+      parameters:
+        - { name: correlationId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IngestionStatus' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by the enterprise IdP. jvault issues no API keys.
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JVAULT_SESSION
+
+  parameters:
+    TicketRef:   { name: ticketRef,  in: path, required: true, schema: { type: string, format: uuid } }
+    ContentRef:  { name: contentRef, in: path, required: true, schema: { type: string, format: uuid } }
+    ProjectKey:  { name: projectKey, in: path, required: true, schema: { type: string } }
+    IssueTypeId: { name: issueTypeId, in: path, required: true, schema: { type: string } }
+    Cursor:      { name: cursor, in: query, schema: { type: string } }
+    Limit:       { name: limit,  in: query, schema: { type: integer, default: 50, maximum: 200 } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string, maxLength: 255 }
+      description: Retention 24 h. Same key + different body fingerprint returns 409.
+
+  responses:
+    Problem:
+      description: RFC 9457 problem document. Never contains submitted values or stored content.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    JiraNotConnected:
+      description: The caller has no usable Jira authorization for this deployment.
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - { $ref: '#/components/schemas/Problem' }
+              - type: object
+                properties:
+                  connectUrl: { type: string, format: uri }
+    ContentStream:
+      description: Decrypted content stream.
+      headers:
+        Content-Disposition: { schema: { type: string } }
+        Cache-Control:
+          schema: { type: string }
+          description: Always no-store for classified content.
+      content:
+        application/octet-stream:
+          schema: { type: string, format: binary }
+
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:     { type: string, format: uri }
+        title:    { type: string }
+        status:   { type: integer }
+        detail:   { type: string }
+        instance: { type: string }
+        traceId:  { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:   { type: string }
+              code:    { type: string }
+              message: { type: string }
+
+    Placement:
+      type: string
+      enum: [JIRA, EXTERNAL, SPLIT]
+
+    CreateFieldsResponse:
+      type: object
+      properties:
+        layout:
+          type: array
+          description: jvault form layout; Jira does not expose screen tabs or ordering.
+          items:
+            type: object
+            properties:
+              sectionTitle: { type: string }
+              fieldKeys:    { type: array, items: { type: string } }
+        fields:
+          type: array
+          items:
+            type: object
+            properties:
+              key:           { type: string }
+              name:          { type: string }
+              required:      { type: boolean }
+              schema:        { type: object, additionalProperties: true }
+              allowedValues: { type: array, items: { type: object, additionalProperties: true } }
+              hasMoreOptions: { type: boolean }
+              placement:     { $ref: '#/components/schemas/Placement' }
+              allowOverride: { type: boolean }
+              supportLevel:
+                type: string
+                enum: [REPRODUCED, DELEGATED_VALIDATION, READ_ONLY]
+
+    CreateTicketRequest:
+      type: object
+      required: [deploymentId, projectKey, issueTypeId, fields]
+      properties:
+        deploymentId: { type: string, format: uuid }
+        projectKey:   { type: string }
+        issueTypeId:  { type: string }
+        fields:       { type: object, additionalProperties: true }
+        placementOverrides:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/Placement' }
+          description: Honoured only where policy allows, and only toward EXTERNAL.
+        attachments:
+          type: array
+          items:
+            type: object
+            properties:
+              uploadId: { type: string }
+              fileName: { type: string }
+        origin:
+          type: object
+          properties:
+            actor: { $ref: '#/components/schemas/Actor' }
+
+    UpdateTicketRequest:
+      type: object
+      properties:
+        fields: { type: object, additionalProperties: true }
+
+    Actor:
+      type: object
+      description: The originating actor, recorded separately from the Jira integration identity.
+      properties:
+        type:        { type: string, enum: [USER, SERVICE, EXTERNAL] }
+        id:          { type: string }
+        displayName: { type: string }
+        source:      { type: string }
+
+    Ticket:
+      type: object
+      properties:
+        ticketRef:   { type: string, format: uuid }
+        issueKey:    { type: string }
+        issueUrl:    { type: string, format: uri }
+        state:       { type: string }
+        fields:      { type: object, additionalProperties: true }
+        parts:
+          type: array
+          items: { $ref: '#/components/schemas/ContentPartSummary' }
+        origin: { type: object, properties: { channel: { type: string }, actor: { $ref: '#/components/schemas/Actor' } } }
+
+    ContentPartSummary:
+      type: object
+      properties:
+        contentRef:   { type: string, format: uuid }
+        partType:     { type: string, enum: [SUMMARY, DESCRIPTION, BODY, COMMENT, ATTACHMENT, CUSTOM_FIELD] }
+        fieldKey:     { type: string }
+        placement:    { $ref: '#/components/schemas/Placement' }
+        classification: { type: string }
+        link:         { type: string, format: uri }
+        accessible:   { type: boolean, description: Whether the caller may read it now.
+                        }
+        surrogate:    { type: string }
+
+    ContentMetadata:
+      type: object
+      properties:
+        contentRef:  { type: string, format: uuid }
+        mediaType:   { type: string }
+        sizeBytes:   { type: integer, format: int64 }
+        sha256:      { type: string }
+        versionNo:   { type: integer }
+        classification: { type: string }
+        state:       { type: string, enum: [AVAILABLE, ARCHIVED, SOFT_DELETED, PURGED] }
+        permissions: { type: array, items: { type: string } }
+
+    CommentInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: object
+          properties:
+            format: { type: string, enum: [adf, wiki, text] }
+            value:  {}
+        visibility:
+          type: object
+          properties:
+            type:  { type: string, enum: [group, role] }
+            value: { type: string }
+
+    Comment:
+      type: object
+      properties:
+        commentRef: { type: string, format: uuid }
+        jiraId:     { type: string }
+        placement:  { $ref: '#/components/schemas/Placement' }
+        body:       { type: object, additionalProperties: true }
+        accessible: { type: boolean }
+
+    GrantInput:
+      type: object
+      required: [principal, permissions]
+      properties:
+        principal:
+          type: object
+          properties:
+            kind:       { type: string, enum: [USER, GROUP, ROLE, SERVICE] }
+            externalId: { type: string }
+        permissions:
+          type: array
+          items: { type: string, enum: [VIEW, CREATE, EDIT, DELETE, DOWNLOAD, MANAGE_ACCESS] }
+        canDelegate: { type: boolean, default: false }
+        expiresAt:   { type: string, format: date-time }
+
+    Grant:
+      allOf:
+        - { $ref: '#/components/schemas/GrantInput' }
+        - type: object
+          properties:
+            grantId:   { type: string, format: uuid }
+            grantedBy: { type: string }
+            createdAt: { type: string, format: date-time }
+
+    TicketStatus:
+      type: object
+      properties:
+        ticketRef: { type: string, format: uuid }
+        state:     { type: string }
+        issueKey:  { type: string }
+        pendingOperations: { type: integer }
+
+    TicketPage:
+      type: object
+      properties:
+        items:      { type: array, items: { $ref: '#/components/schemas/Ticket' } }
+        nextCursor: { type: string }
+        hasMore:    { type: boolean }
+
+    IngestionStatus:
+      type: object
+      properties:
+        correlationId: { type: string }
+        state:
+          type: string
+          enum: [RECEIVED, VALIDATED, CONTENT_STORED, JIRA_CREATED, LINKED, COMPLETE,
+                 DUPLICATE, RETRYING, DEAD_LETTERED]
+        attempts:      { type: integer }
+        lastErrorCode: { type: string, description: Error class only; never error content. }
+        ticketRef:     { type: string, format: uuid }
+        issueKey:      { type: string }
+        source:
+          type: object
+          properties:
+            topic:     { type: string }
+            partition: { type: integer }
+            offset:    { type: integer, format: int64 }

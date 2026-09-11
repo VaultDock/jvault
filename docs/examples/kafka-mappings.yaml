@@ -1,0 +1,121 @@
+# Example Kafka mapping configuration.
+# Expression language: restricted JSONPath + a fixed function set. No scripting engine.
+
+defaults:
+  retries: { tiers: [PT5S, PT1M, PT10M, PT1H] }
+  routing:
+    onValidationError: DLQ
+    onUnmappedRequiredJiraField: DLQ
+    onExistingKey: CREATE
+  idempotency: { window: P7D }
+  actor: { mode: RECORD_ONLY }
+
+mappings:
+
+  - id: sec-incident-v2
+    topic: security.alerts.v1
+    consumerGroup: jvault-sec
+    concurrency: 3
+    schema:
+      type: AVRO
+      registry: https://schema-registry.internal
+      subject: security.alerts.v1-value
+      compatibility: BACKWARD
+    deployment: jira-cloud-prod
+    target: { project: SEC, issueType: Incident }
+    idempotency:
+      dedupeKey: ["$.alert.id", "$.alert.revision"]
+      window: P30D
+    correlation:
+      parentKey: "$.alert.id"
+      onExistingKey: UPDATE
+      updateComment: "Alert revised to revision {{$.alert.revision}}."
+    actor:
+      expr: "$.reporter.email"
+      mode: RECORD_ONLY
+    fields:
+      summary:
+        expr: "concat('[', $.alert.severity, '] ', $.alert.title)"
+        maxLength: 255
+        onOverflow: TRUNCATE_ELLIPSIS
+      description:
+        expr: "$.alert.narrative"
+        format: MARKDOWN
+        placement: EXTERNAL            # may tighten policy, never loosen it
+      priority:
+        lookup:
+          from: "$.alert.severity"
+          table: { CRITICAL: "1", HIGH: "2", MEDIUM: "3", LOW: "4" }
+          default: "3"
+      labels:
+        expr: "$.alert.tags[*]"
+        transform: SLUGIFY
+      customfield_10010:               # Source host
+        expr: "$.alert.source.hostname"
+        required: true
+      customfield_10011:               # Detected at
+        expr: "$.detectedAt"
+        format: DATETIME
+    attachments:
+      - forEach: "$.alert.evidence[*]"
+        fileName: "$.filename"
+        content: { expr: "$.data", encoding: BASE64 }
+        mediaType: "$.contentType"
+        maxBytes: 52428800
+        onOversize: DLQ
+    guards:
+      requireClassificationAtLeast: RESTRICTED
+      rejectIfMissing: ["$.alert.id", "$.alert.severity", "$.alert.title"]
+
+  - id: build-failure-v1
+    topic: build.failures.v1
+    consumerGroup: jvault-eng
+    concurrency: 6
+    schema:
+      type: JSON_SCHEMA
+      inline: classpath:/schemas/build-failure-v1.json
+    deployment: jira-cloud-prod
+    target: { project: ENG, issueType: Bug }
+    idempotency:
+      dedupeKey: ["$.build.id"]
+      window: P3D
+    fields:
+      summary:
+        expr: "concat('Build failed: ', $.build.pipeline, ' (', $.build.failedStage, ')')"
+        maxLength: 255
+      description:
+        expr: "concat('Pipeline: ', $.build.pipeline, '\nBranch: ', $.build.branch,
+                      '\nStage: ', $.build.failedStage, '\nLogs: ', $.build.logUrl)"
+        format: MARKDOWN
+        # No placement declared: the global default (JIRA) applies. Nothing is externalised.
+      labels: { literal: ["ci", "auto-raised"] }
+    routing:
+      onExistingKey: IGNORE            # repeated failures of one build must not spam Jira
+
+  - id: hr-case-intake-v1
+    topic: hr.cases.v1
+    consumerGroup: jvault-hr
+    concurrency: 1                     # ordering matters; low volume
+    schema:
+      type: AVRO
+      registry: https://schema-registry.internal
+      subject: hr.cases.v1-value
+    deployment: jira-cloud-prod
+    target: { project: HR, issueType: Case }
+    idempotency:
+      dedupeKey: ["$.case.reference"]
+      window: P365D
+    actor:
+      expr: "$.submittedBy.employeeId"
+      mode: RECORD_ONLY                # never surfaced in Jira text for this project
+    fields:
+      summary:
+        expr: "$.case.subject"
+        placement: EXTERNAL            # policy hr-case-summary already forces this; declared for clarity
+      description:
+        expr: "$.case.body"
+        format: MARKDOWN
+        placement: EXTERNAL
+    guards:
+      requireClassificationAtLeast: RESTRICTED
+      denyIfPlacementResolvesTo: [JIRA]   # fail closed if a policy edit ever relaxes this project
