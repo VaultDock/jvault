@@ -107,6 +107,39 @@ user on Data Center. jvault is **not** distributed as an Atlassian app.
 
 ---
 
+## D5 — Support PostgreSQL, Microsoft SQL Server and Oracle
+
+**Decided:** the metadata store must run on all three. PostgreSQL is no longer assumed.
+
+**Consequences — this one reaches further than it looks.** The design used PostgreSQL features in
+several load-bearing places. Each now needs a portable answer or a per-vendor one.
+
+| Where | PostgreSQL assumption | Portable answer |
+|---|---|---|
+| **Outbox claim** | `SELECT … FOR UPDATE SKIP LOCKED` | Per-vendor SQL, not portable. Oracle has `FOR UPDATE SKIP LOCKED`; SQL Server uses `WITH (UPDLOCK, READPAST)` over a `TOP (n) … ORDER BY` CTE. All three can dequeue without two workers taking one row, but no single statement works on all three. **This is the sharpest vendor difference in the system** and it is isolated in one method of one class. |
+| **Idempotent append** | `INSERT … ON CONFLICT DO NOTHING` | Rely on the unique constraint and catch `SQLIntegrityConstraintViolationException`, which JDBC standardises across vendors. Portable, and arguably clearer about intent. |
+| **`payloadRef`, policy and mapping documents** | `jsonb` | Plain text columns holding JSON, parsed in the application. **We give up SQL-side JSON querying**, which the outbox never needed but an admin reporting screen might. Worth knowing before someone writes a query against it. |
+| **Single-flight token refresh** | `pg_advisory_xact_lock` | A `resource_lock` table with `SELECT … FOR UPDATE` on a named row. Works on all three, costs one round trip, and is easier to reason about than an advisory-lock namespace. |
+| **UUID keys** | `uuid` column | `CHAR(36)` holding the canonical string. Oracle has no native UUID and SQL Server's `uniqueidentifier` sorts differently from everyone else's. Costs 20 bytes a row against total portability and no surprises in index ordering. |
+| **Booleans** | `boolean` | `SMALLINT` 0/1. Oracle had no SQL `BOOLEAN` before 23c. |
+| **Timestamps** | `timestamptz` | Store UTC in a plain timestamp and convert at the boundary. SQL Server's `datetime2` has no time zone; relying on server time zones across three vendors is a bug waiting to happen. |
+| **`RETURNING`** | Multi-row `RETURNING` | SQL Server uses `OUTPUT`; Oracle's `RETURNING INTO` does not return a multi-row result set to JDBC. The claim implementation differs per vendor accordingly. |
+| **Audit partitioning** | Declarative range partitioning | All three partition, all three differently. Left to the deployment's DBA with a documented recommendation rather than baked into a migration. |
+| **Migrations** | One Flyway script set | Per-vendor migration directories. One logical schema, three physical scripts, with a test asserting they stay in step. |
+
+**Shape of the answer.** A `SqlDialect` abstraction with three implementations. Everything that
+is genuinely portable stays in shared code; the handful of statements that cannot be are named,
+isolated, and individually tested. The alternative — an ORM or a query builder papering over the
+differences — would hide exactly the dequeue semantics this system depends on for correctness,
+which is the one thing that must not be hidden.
+
+**Verification burden, stated plainly.** Three databases means three times the integration
+testing, and the two commercial engines need licensed images that cannot run in every CI
+environment. Any dialect not exercised against a real instance is **unverified code**, and this
+repository will say so per dialect rather than implying all three are equally proven.
+
+---
+
 ## Conflict raised by D1 + D2 — needs an answer before Phase 0 ends
 
 **Jira Cloud requires outbound internet access. A genuinely air-gapped network cannot reach

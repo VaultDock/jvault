@@ -67,7 +67,16 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 186 tests, all green.
+Java 21, Maven multi-module. `mvn test` — 199 tests green, 5 skipped.
+
+> **The 5 skipped are the PostgreSQL outbox integration tests.** They are wired into `mvn test`
+> and run wherever Testcontainers can reach Docker, but they did **not execute** on the machine
+> this was built on: Docker Desktop's `~/.docker/run/docker.sock` there is a redirector that
+> answers docker-java's `/info` with HTTP 400, so every Testcontainers discovery strategy is
+> rejected. The `docker` CLI follows the redirect; docker-java does not. Until that suite has
+> actually run somewhere, treat the PostgreSQL dialect as **reviewed but not yet proven** — the
+> same status the other two dialects carry, and the reason `SqlDialect` reports its verification
+> state rather than leaving it to a comment.
 
 | Module | Contains | State |
 |---|---|---|
@@ -76,6 +85,7 @@ Java 21, Maven multi-module. `mvn test` — 186 tests, all green.
 | `jvault-outbox` | Outbox, per-issue dispatcher lanes, backoff, rate limiting, ambiguity protocol | **Done for MVP scope**; PostgreSQL adapter not started |
 | `jvault-crypto` | Envelope encryption, KMS port, self-describing object header, key rotation | **Done for MVP scope**; Vault Transit and PKCS#11 adapters not started |
 | `jvault-storage` | `ContentStore` SPI, capability negotiation, filesystem backend | **Filesystem done**; CMIS and S3 not started |
+| `jvault-persistence` | Outbox JDBC adapter, three SQL dialects, per-vendor migrations | **PostgreSQL written, unrun here**; SQL Server and Oracle unverified |
 
 Built in this order deliberately: these are the pieces
 [15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
@@ -103,6 +113,8 @@ and none of them depends on the unanswered Q0 connectivity question.
 | Tampering with stored bytes is detected | Tink binds frame index and the final-frame flag into each nonce; jvault binds object identity and the header hash into the AAD. Bit flips, truncation, frame reordering, cross-object splicing and object substitution all fail to authenticate |
 | Nothing is ever stored unencrypted | A key-manager outage fails the write closed; a test asserts not a byte is emitted |
 | KEK rotation does not rewrite content | Rewrap updates the database; the object is untouched. A test rotates a ring, shows the header's now-stale key failing, and the rewrapped key opening the very same bytes |
+| One logical schema across three engines | `MigrationParityTest` compares the column sets, the unique constraint and the indexes across all three migration scripts, so a column added to one and forgotten in another is a red build rather than a production incident |
+| An unproven dialect announces itself | `SqlDialect.verifiedByIntegrationTests()` is a claim about evidence, not aspiration; `DialectDetector.verificationNotice` warns at startup when an unverified dialect is selected |
 
 ### Known limits of what is built
 

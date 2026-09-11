@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>dev.jvault</groupId>
+    <artifactId>jvault-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>jvault-persistence</artifactId>
+  <name>jvault-persistence</name>
+  <description>
+    JDBC adapters for the persistence ports, across PostgreSQL, Microsoft SQL Server and Oracle
+    (decision D5). Everything portable lives in shared code; the statements that genuinely cannot
+    be portable are isolated in SqlDialect and named as such.
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>dev.jvault</groupId>
+      <artifactId>jvault-outbox</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.zaxxer</groupId>
+      <artifactId>HikariCP</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+
+    <!--
+      JDBC drivers are optional: a deployment brings the one it needs. Bundling all three would
+      drag Oracle's driver into every build for no benefit, and the commercial drivers have
+      licence terms a deployer should opt into knowingly.
+    -->
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <!-- Test scope: PostgreSQL is the dialect this repository verifies against a real engine. -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.16</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

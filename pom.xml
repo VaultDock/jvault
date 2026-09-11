@@ -20,6 +20,7 @@
     <module>jvault-outbox</module>
     <module>jvault-crypto</module>
     <module>jvault-storage</module>
+    <module>jvault-persistence</module>
   </modules>
 
   <properties>
@@ -29,6 +30,12 @@
     <assertj.version>3.26.3</assertj.version>
     <archunit.version>1.3.0</archunit.version>
     <tink.version>1.15.0</tink.version>
+    <hikari.version>5.1.0</hikari.version>
+    <flyway.version>10.20.1</flyway.version>
+    <postgresql.version>42.7.4</postgresql.version>
+    <mssql.version>12.8.1.jre11</mssql.version>
+    <ojdbc.version>23.5.0.24.07</ojdbc.version>
+    <testcontainers.version>1.20.4</testcontainers.version>
   </properties>
 
   <dependencyManagement>
@@ -54,6 +61,33 @@
         <groupId>com.google.crypto.tink</groupId>
         <artifactId>tink</artifactId>
         <version>${tink.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.zaxxer</groupId>
+        <artifactId>HikariCP</artifactId>
+        <version>${hikari.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-core</artifactId>
+        <version>${flyway.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.flywaydb</groupId>
+        <artifactId>flyway-database-postgresql</artifactId>
+        <version>${flyway.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <version>${postgresql.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
