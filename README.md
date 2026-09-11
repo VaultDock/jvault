@@ -67,7 +67,7 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 307 tests green, 5 skipped.
+Java 21, Maven multi-module. `mvn test` — 347 tests green, 5 skipped.
 
 > **There is no user interface yet.** Everything built so far is backend. The React SPA is
 > still unstarted, and its first dependency is the ADF-editor spike in
@@ -92,6 +92,7 @@ Java 21, Maven multi-module. `mvn test` — 307 tests green, 5 skipped.
 | `jvault-persistence` | Outbox JDBC adapter, three SQL dialects, per-vendor migrations | **PostgreSQL written, unrun here**; SQL Server and Oracle unverified |
 | `jvault-content` | Ticket creation and amendment, content service, surrogates, payload assembler | **Create, comment and attach done**; edit and delete not started |
 | `jvault-ingest` | Event mapping, processing state machine, deduplication, dead-lettering | **Processing core done**; Kafka client adapter, schema registry and retry topics not started |
+| `jvault-authz` | Permissions, inheritance, delegation, Jira-permission combination | **Decision logic done**; persistence adapter and decision cache not started |
 
 Built in this order deliberately: these are the pieces
 [15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
@@ -126,6 +127,11 @@ and none of them depends on the unanswered Q0 connectivity question.
 | An externalised comment keeps its Jira shell | Skipping the Jira comment would leave holes in the conversation and silently break notifications, watchers and mentions, so the shell exists and carries the surrogate |
 | An attachment reaches Jira in no form | Only a remote link, whose title is built from part type, size and media type. The filename is a `SensitiveValue` and appears in no surrogate, no storage key, no link title and nothing on disk |
 | Large content never sits in memory | Ciphertext spools to a temporary file and streams into the backend; an 8 MB attachment is covered by test, and the spool is emptied afterwards |
+| Possession of a link grants nothing | Authorization is decided per request from the caller's current principals; knowing a content reference changes nothing, and a decision never sticks across requests |
+| Neither system can bypass the other | `INTERSECT` is the default: a Jira user without a vault grant is denied, and a vault grant without Jira access is denied. The other three modes exist but declare that they need explicit acknowledgement |
+| A Jira outage is not a denial | An unavailable dependency returns `UNAVAILABLE`, not `DENY`, so a user is told the check cannot be made rather than that they have lost access. A per-space grace window may reuse a previously granted decision — never manufacture one, never for writes |
+| Nobody can give away more than they hold | Enforced at grant time and covered by a generative test over random permission sets, because a user who could grant `DOWNLOAD` to their own group has just granted it to themselves |
+| Revoking a delegation revokes what it produced | Grants record the authority they were made under, so revocation cascades — leaving the children is how access outlives its reason, invisibly |
 | A dead-letter record cannot carry a payload | `DeadLetterRecord` has no payload field and `DeadLetterPublisher` has no overload accepting one, so the "just include the message for debugging" shortcut requires changing an interface — a conversation rather than an accident. The original goes to the encrypted quarantine and is referenced by id |
 | Mapping configuration is not executable | A closed set of four value sources and a restricted path syntax, with no scripting engine. Administrator-authored configuration stored in a database cannot become a code-execution surface |
 | Two kinds of duplicate are distinguished | The offset check catches redelivery after a crash or rebalance; the business-key check catches republication on a new offset. A system with only one of them either duplicates tickets on replay or redoes work on every rebalance |

@@ -23,6 +23,7 @@
     <module>jvault-persistence</module>
     <module>jvault-content</module>
     <module>jvault-ingest</module>
+    <module>jvault-authz</module>
   </modules>
 
   <properties>
