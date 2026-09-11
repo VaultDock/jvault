@@ -34,13 +34,16 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
     private static final long HASH_CHECK_SIZE_LIMIT = 64 * 1024;
 
     private final TicketRepository tickets;
+    private final CommentRepository comments;
     private final ContentMetadataRepository metadata;
     private final ContentService contentService;
 
     public TicketPayloadAssembler(TicketRepository tickets,
+                                  CommentRepository comments,
                                   ContentMetadataRepository metadata,
                                   ContentService contentService) {
         this.tickets = Objects.requireNonNull(tickets, "tickets");
+        this.comments = Objects.requireNonNull(comments, "comments");
         this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.contentService = Objects.requireNonNull(contentService, "contentService");
     }
@@ -62,6 +65,13 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
                         .orElseThrow(() -> new EffectNoLongerApplicable("PART_DELETED"));
                 builder.field("globalId", "jvault:content:" + part.contentRef());
                 builder.field("title", titleFor(part));
+            }
+            case ADD_COMMENT, EDIT_COMMENT -> {
+                CommentRecord comment = comments.find(entry.payloadRef().get("commentRef"))
+                        .orElseThrow(() -> new EffectNoLongerApplicable("COMMENT_DELETED"));
+                // jiraBody is Jira-safe by construction: verbatim when the comment is
+                // Jira-placed, the rendered surrogate when it is not.
+                builder.field("body", comment.jiraBody());
             }
             case SET_PROPERTY -> entry.payloadRef().forEach(builder::field);
             default -> ticket.jiraFields().forEach(builder::field);

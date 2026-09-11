@@ -1,5 +1,6 @@
 package dev.jvault.content;
 
+import dev.jvault.content.support.InMemoryCommentRepository;
 import dev.jvault.content.support.InMemoryContentMetadataRepository;
 import dev.jvault.content.support.InMemoryOutboxRepository;
 import dev.jvault.content.support.InMemoryTicketRepository;
@@ -72,6 +73,7 @@ class EndToEndTicketCreationTest {
     private final InMemoryOutboxRepository outbox = new InMemoryOutboxRepository();
     private final InMemoryTicketRepository tickets = new InMemoryTicketRepository();
     private final InMemoryContentMetadataRepository metadata = new InMemoryContentMetadataRepository();
+    private final InMemoryCommentRepository comments = new InMemoryCommentRepository();
 
     private ContentService contentService;
     private TicketCreationService creation;
@@ -88,7 +90,7 @@ class EndToEndTicketCreationTest {
                 ids, clock, "acme");
         creation = new TicketCreationService(policies(), contentService, tickets, outbox,
                 new LinkFactory("https://jvault.example.com"), ids, clock);
-        assembler = new TicketPayloadAssembler(tickets, metadata, contentService);
+        assembler = new TicketPayloadAssembler(tickets, comments, metadata, contentService);
     }
 
     @Nested

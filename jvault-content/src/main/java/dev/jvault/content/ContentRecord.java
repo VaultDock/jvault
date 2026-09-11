@@ -1,6 +1,7 @@
 package dev.jvault.content;
 
 import dev.jvault.domain.common.Classification;
+import dev.jvault.domain.common.SensitiveValue;
 import dev.jvault.domain.placement.PartType;
 import dev.jvault.storage.spi.StoredObjectRef;
 
@@ -9,6 +10,11 @@ import java.util.Objects;
 
 /**
  * What jvault knows about one externally stored part, once it has been written.
+ *
+ * <p>{@code jiraSurrogate} is the text Jira holds in place of the content. It lives beside the
+ * content rather than only inside the Jira issue so that the payload assembler can rebuild the
+ * Jira write from jvault's own record — and so that a surrogate a user accidentally edits in Jira
+ * can be restored (docs/12-reliability.md 12.1).
  *
  * <p>The wrapped data key lives here rather than only in the object header, and the database is
  * authoritative: a KEK rotation rewraps this and deliberately does not rewrite the object, so the
@@ -33,6 +39,8 @@ public record ContentRecord(String contentRef,
                             byte[] ciphertextSha256,
                             long sizeBytes,
                             String mediaType,
+                            SensitiveValue displayName,
+                            String jiraSurrogate,
                             StoredObjectRef storedObject,
                             Instant createdAt) {
 
@@ -63,6 +71,8 @@ public record ContentRecord(String contentRef,
     /** Identifiers only — safe to log, and safe to put in an outbox row. */
     @Override
     public String toString() {
+        // Note what is absent: displayName. It is a SensitiveValue, so including it would print
+        // the redaction marker rather than the name — but leaving it out entirely is clearer.
         return "ContentRecord[" + contentRef + " v" + versionNo + ", " + partType
                 + (fieldKey == null ? "" : ":" + fieldKey) + ", " + sizeBytes + " bytes]";
     }

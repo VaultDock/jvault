@@ -14,7 +14,6 @@ import dev.jvault.jira.egress.JiraOperation;
 import dev.jvault.outbox.OutboxEntry;
 import dev.jvault.outbox.OutboxRepository;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -95,10 +94,10 @@ public final class TicketCreationService {
                 continue;
             }
 
-            ContentRecord stored = contentService.store(new ContentService.StoreRequest(
-                    ticket.ticketRef(), partTypeOf(fieldKey), fieldKey,
-                    value.getBytes(StandardCharsets.UTF_8), "text/plain",
-                    placement.classification(), placement.keyRing()));
+            ContentRecord stored = contentService.storeText(
+                    PartDescriptor.text(ticket.ticketRef(), partTypeOf(fieldKey), fieldKey,
+                            placement.classification(), placement.keyRing()),
+                    value);
             storedParts.add(stored);
 
             // The only thing that reaches Jira for this field. Built from an allow-listed

@@ -67,7 +67,11 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 212 tests green, 5 skipped.
+Java 21, Maven multi-module. `mvn test` — 222 tests green, 5 skipped.
+
+> **There is no user interface yet.** Everything built so far is backend. The React SPA is
+> still unstarted, and its first dependency is the ADF-editor spike in
+> [15. Implementation plan](docs/15-implementation-plan.md) Phase 0.
 
 > **The 5 skipped are the PostgreSQL outbox integration tests.** They are wired into `mvn test`
 > and run wherever Testcontainers can reach Docker, but they did **not execute** on the machine
@@ -86,7 +90,7 @@ Java 21, Maven multi-module. `mvn test` — 212 tests green, 5 skipped.
 | `jvault-crypto` | Envelope encryption, KMS port, self-describing object header, key rotation | **Done for MVP scope**; Vault Transit and PKCS#11 adapters not started |
 | `jvault-storage` | `ContentStore` SPI, capability negotiation, filesystem backend | **Filesystem done**; CMIS and S3 not started |
 | `jvault-persistence` | Outbox JDBC adapter, three SQL dialects, per-vendor migrations | **PostgreSQL written, unrun here**; SQL Server and Oracle unverified |
-| `jvault-content` | Ticket creation, content service, surrogate rendering, payload assembler | **Create path done for MVP scope**; edit, comments and attachments not started |
+| `jvault-content` | Ticket creation and amendment, content service, surrogates, payload assembler | **Create, comment and attach done**; edit and delete not started |
 
 Built in this order deliberately: these are the pieces
 [15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
@@ -118,6 +122,9 @@ and none of them depends on the unanswered Q0 connectivity question.
 | An unproven dialect announces itself | `SqlDialect.verifiedByIntegrationTests()` is a claim about evidence, not aspiration; `DialectDetector.verificationNotice` warns at startup when an unverified dialect is selected |
 | **The whole path holds together** | `EndToEndTicketCreationTest` runs policy, encryption, filesystem storage, outbox and dispatcher with every real component except the Jira transport, and asserts the canary appears in none of: the Jira field map, the outbox rows, the bytes on disk, or the payload the gateway receives |
 | A replay creates nothing | The dedupe-key reservation is atomic; a second identical command returns the first ticket, stores no content and enqueues no effects |
+| An externalised comment keeps its Jira shell | Skipping the Jira comment would leave holes in the conversation and silently break notifications, watchers and mentions, so the shell exists and carries the surrogate |
+| An attachment reaches Jira in no form | Only a remote link, whose title is built from part type, size and media type. The filename is a `SensitiveValue` and appears in no surrogate, no storage key, no link title and nothing on disk |
+| Large content never sits in memory | Ciphertext spools to a temporary file and streams into the backend; an 8 MB attachment is covered by test, and the spool is emptied afterwards |
 
 ### Known limits of what is built
 
