@@ -67,7 +67,7 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 222 tests green, 5 skipped.
+Java 21, Maven multi-module. `mvn test` — 272 tests green, 5 skipped.
 
 > **There is no user interface yet.** Everything built so far is backend. The React SPA is
 > still unstarted, and its first dependency is the ADF-editor spike in
@@ -85,7 +85,7 @@ Java 21, Maven multi-module. `mvn test` — 222 tests green, 5 skipped.
 | Module | Contains | State |
 |---|---|---|
 | `jvault-domain` | Placement policy engine, `SensitiveValue`, surrogate rendering | **Done for MVP scope** |
-| `jvault-jira` | Egress guard, `JiraSafePayload`, gateway and search ports, architecture rules | **Boundary done**; transport not started |
+| `jvault-jira` | Egress guard, `JiraSafePayload`, deployment abstraction, HTTP client, response classifier | **Boundary, transport and classification done**; request-body mapping not started |
 | `jvault-outbox` | Outbox, per-issue dispatcher lanes, backoff, rate limiting, ambiguity protocol | **Done for MVP scope**; PostgreSQL adapter not started |
 | `jvault-crypto` | Envelope encryption, KMS port, self-describing object header, key rotation | **Done for MVP scope**; Vault Transit and PKCS#11 adapters not started |
 | `jvault-storage` | `ContentStore` SPI, capability negotiation, filesystem backend | **Filesystem done**; CMIS and S3 not started |
@@ -125,6 +125,9 @@ and none of them depends on the unanswered Q0 connectivity question.
 | An externalised comment keeps its Jira shell | Skipping the Jira comment would leave holes in the conversation and silently break notifications, watchers and mentions, so the shell exists and carries the surrogate |
 | An attachment reaches Jira in no form | Only a remote link, whose title is built from part type, size and media type. The filename is a `SensitiveValue` and appears in no surrogate, no storage key, no link title and nothing on disk |
 | Large content never sits in memory | Ciphertext spools to a temporary file and streams into the backend; an 8 MB attachment is covered by test, and the spool is emptied afterwards |
+| Ambiguity stays rare | `JiraOperation.isIdempotent()` decides what an unknown outcome means. A timed-out remote-link upsert or property `PUT` is merely retryable; only a create, comment or attachment is genuinely ambiguous, so the recovery protocol is reserved for the cases that need it |
+| A request that never left is not ambiguous | The HTTP client distinguishes a connection that was never established from a response that never arrived, and only the latter can have taken effect |
+| Deployments admit what they cannot do | `JiraDeployment.Capabilities` records section-splitting, PKCE, property search and rate limits per deployment, so configuration validation refuses a policy the target cannot honour |
 
 ### Known limits of what is built
 
@@ -162,6 +165,9 @@ Per [15. Implementation plan](docs/15-implementation-plan.md), in order: the Pos
 for the outbox and the content metadata schema, then the S3-compatible and CMIS backends, then the
 two `JiraDeployment` implementations.
 
-**Q0 becomes blocking at the third of those.** Whether the deployment can reach
-`auth.atlassian.com` through a proxy or is genuinely air-gapped decides whether the Jira Cloud
-implementation is built at all.
+**Q0 is narrower than it first looked.** Only the *Cloud* transport depends on it: under D1 both
+deployments are in scope, and under every reading of Q0 the Data Center transport is needed —
+readings (a) and (c) need both, reading (b) needs Data Center alone. The HTTP client, the response
+classifier and the deployment abstraction are shared by both and are built. What Q0 still gates is
+whether a Cloud deployment is configured at all, and whether it needs a forward proxy —
+`CloudDeployment` already accepts a gateway base URL for exactly that.
