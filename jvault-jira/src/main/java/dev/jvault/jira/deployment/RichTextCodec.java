@@ -2,12 +2,15 @@ package dev.jvault.jira.deployment;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import dev.jvault.jira.egress.AdfSanitizer;
 
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Turns plain text into whatever rich-text shape a deployment expects.
@@ -55,6 +58,8 @@ public interface RichTextCodec {
 
         private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
         private static final ObjectMapper JSON = new ObjectMapper();
+
+        private static final Pattern URL = Pattern.compile("https?://\\S+");
 
         @Override
         public JsonNode encode(String plainText) {
@@ -113,13 +118,54 @@ public interface RichTextCodec {
                     inline.add(NODES.objectNode().put("type", "hardBreak"));
                 }
                 if (!lines[i].isEmpty()) {
-                    ObjectNode text = NODES.objectNode();
-                    text.put("type", "text");
-                    text.put("text", lines[i]);
-                    inline.add(text);
+                    addLine(inline, lines[i]);
                 }
             }
             return paragraph;
+        }
+
+        /**
+         * One line, with any web address in it carried as a link rather than as characters.
+         *
+         * <p>This is not the Markdown parsing the class refuses to do: nothing about the
+         * surrounding text is reinterpreted, and a URL means the same thing whether or not it is
+         * clickable. The difference is only whether a reader can follow it, and the one place it
+         * matters most is the surrogate left behind in a secured field, whose entire purpose is
+         * to say where the content went.
+         */
+        private static void addLine(ArrayNode inline, String line) {
+            Matcher urls = URL.matcher(line);
+            int at = 0;
+            while (urls.find()) {
+                if (urls.start() > at) {
+                    inline.add(text(line.substring(at, urls.start()), null));
+                }
+                // Trailing punctuation is part of the sentence, not of the address.
+                String url = urls.group();
+                int end = urls.end();
+                while (!url.isEmpty() && ".,;:!?)".indexOf(url.charAt(url.length() - 1)) >= 0) {
+                    url = url.substring(0, url.length() - 1);
+                    end--;
+                }
+                inline.add(text(url, url));
+                at = end;
+            }
+            if (at < line.length()) {
+                inline.add(text(line.substring(at), null));
+            }
+        }
+
+        private static ObjectNode text(String value, String href) {
+            ObjectNode node = NODES.objectNode();
+            node.put("type", "text");
+            node.put("text", value);
+            if (href != null) {
+                ObjectNode mark = NODES.objectNode();
+                mark.put("type", "link");
+                mark.putObject("attrs").put("href", href);
+                node.putArray("marks").add(mark);
+            }
+            return node;
         }
     }
 

@@ -83,6 +83,10 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
                     }
                     entry.payloadRef().forEach(builder::field);
                 } else {
+                    // A link for one part. Nothing enqueues these any more — a ticket gets one
+                    // reference and no more (see VaultReference) — but rows written before that
+                    // rule may still be waiting in somebody's outbox, and a queue is a poor
+                    // place to discover a code path was deleted.
                     ContentRecord part = metadata.findCurrent(contentRef)
                             .orElseThrow(() -> new EffectNoLongerApplicable("PART_DELETED"));
                     builder.field("globalId", "jvault:content:" + part.contentRef());

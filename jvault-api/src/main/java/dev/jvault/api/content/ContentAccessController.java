@@ -9,6 +9,7 @@ import dev.jvault.authz.Permission;
 import dev.jvault.authz.Scope;
 import dev.jvault.content.ContentRecord;
 import dev.jvault.content.ContentService;
+import dev.jvault.content.LinkFactory;
 import dev.jvault.content.TicketRecord;
 import dev.jvault.content.TicketRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,6 +71,7 @@ public class ContentAccessController {
     private final ContentAuthorizationService authorization;
     private final CallerResolver callers;
     private final AccessAuditor audit;
+    private final LinkFactory links;
     private final String jiraConnectUrl;
 
     public ContentAccessController(ContentService contentService,
@@ -77,6 +79,7 @@ public class ContentAccessController {
                                    ContentAuthorizationService authorization,
                                    CallerResolver callers,
                                    AccessAuditor audit,
+                                   LinkFactory links,
                                    @Value("${jvault.jira.connect-url:/api/v1/jira/connections/start}")
                                    String jiraConnectUrl) {
         this.contentService = Objects.requireNonNull(contentService, "contentService");
@@ -84,6 +87,7 @@ public class ContentAccessController {
         this.authorization = Objects.requireNonNull(authorization, "authorization");
         this.callers = Objects.requireNonNull(callers, "callers");
         this.audit = Objects.requireNonNull(audit, "audit");
+        this.links = Objects.requireNonNull(links, "links");
         this.jiraConnectUrl = Objects.requireNonNull(jiraConnectUrl, "jiraConnectUrl");
     }
 
@@ -93,11 +97,22 @@ public class ContentAccessController {
      * <p>Deliberately outside {@code /api/v1}: it is a permanent public identifier by contract, so
      * it must not be versioned along with the API. Every Jira issue ever created carries one of
      * these, and they have to keep working.
+     *
+     * <p>It opens the ticket, where the content is <em>shown</em>. It used to serve the bytes
+     * with an attachment disposition, which meant following a link out of a Jira issue put the
+     * secured file in the reader's downloads folder — the one place the whole system exists to
+     * keep it out of. Taking a copy is still possible for whoever is granted
+     * {@link Permission#DOWNLOAD}, but it is now a deliberate act rather than the effect of
+     * clicking a link.
      */
     @GetMapping("/c/{contentRef}")
     public ResponseEntity<?> followLink(@PathVariable String contentRef,
                                         HttpServletRequest request) {
-        return download(contentRef, request);
+        return resolve(contentRef, Permission.VIEW, request, (caller, record) ->
+                ResponseEntity.status(303)
+                        .header(HttpHeaders.LOCATION, links.linkToTicket(record.ticketRef()))
+                        .cacheControl(CacheControl.noStore())
+                        .build());
     }
 
     @GetMapping("/api/v1/content/{contentRef}")

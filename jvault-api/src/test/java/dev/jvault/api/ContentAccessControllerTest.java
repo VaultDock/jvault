@@ -11,6 +11,7 @@ import dev.jvault.authz.Scope;
 import dev.jvault.authz.SpacePermissionMode;
 import dev.jvault.content.ContentRecord;
 import dev.jvault.content.ContentService;
+import dev.jvault.content.LinkFactory;
 import dev.jvault.content.PartDescriptor;
 import dev.jvault.content.TicketRecord;
 import dev.jvault.content.support.InMemoryContentMetadataRepository;
@@ -82,7 +83,8 @@ class ContentAccessControllerTest {
         var authorization = beans.authorization(acl, jira, clock);
 
         var controller = new ContentAccessController(contentService, tickets, authorization,
-                callers, auditor, "/api/v1/jira/connections/start");
+                callers, auditor, new LinkFactory("https://jvault.example.com"),
+                "/api/v1/jira/connections/start");
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
 
         acl.reset();
@@ -128,13 +130,19 @@ class ContentAccessControllerTest {
         }
 
         @Test
-        @DisplayName("an authorized caller gets the bytes")
-        void authorizedCallerGetsContent() throws Exception {
+        @DisplayName("an authorized caller is sent to the ticket, not handed a file")
+        void authorizedCallerIsSentToTheTicket() throws Exception {
             acl.grant(Permission.VIEW, Permission.DOWNLOAD);
 
+            // Following a link out of a Jira issue must not put the secured content in a
+            // downloads folder, which is the one place the system exists to keep it out of.
             mvc.perform(get("/c/" + contentRef))
-                    .andExpect(status().isOk())
-                    .andExpect(content().string(SECRET));
+                    .andExpect(status().isSeeOther())
+                    .andExpect(header().string("Location",
+                            org.hamcrest.Matchers.containsString("/t/ticket-1")))
+                    .andExpect(header().doesNotExist("Content-Disposition"))
+                    .andExpect(content().string(org.hamcrest.Matchers.not(
+                            org.hamcrest.Matchers.containsString(SECRET))));
         }
     }
 
@@ -162,7 +170,7 @@ class ContentAccessControllerTest {
             // VIEW on the space, but no DOWNLOAD: existence is already known to them.
             acl.grant(Permission.VIEW);
 
-            mvc.perform(get("/c/" + contentRef))
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download"))
                     .andExpect(status().isForbidden())
                     .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
         }
@@ -186,23 +194,23 @@ class ContentAccessControllerTest {
         @DisplayName("a revoked grant stops working on the very next request")
         void revocationTakesEffectImmediately() throws Exception {
             acl.grant(Permission.VIEW, Permission.DOWNLOAD);
-            mvc.perform(get("/c/" + contentRef)).andExpect(status().isOk());
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download")).andExpect(status().isOk());
 
             acl.reset();
 
             // No sticky allow, no session-level "already authorized for this object".
-            mvc.perform(get("/c/" + contentRef)).andExpect(status().isNotFound());
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download")).andExpect(status().isNotFound());
         }
 
         @Test
         @DisplayName("losing Jira access stops working on the very next request")
         void jiraRevocationTakesEffectImmediately() throws Exception {
             acl.grant(Permission.VIEW, Permission.DOWNLOAD);
-            mvc.perform(get("/c/" + contentRef)).andExpect(status().isOk());
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download")).andExpect(status().isOk());
 
             jira.allow(false);
 
-            mvc.perform(get("/c/" + contentRef)).andExpect(status().isForbidden());
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download")).andExpect(status().isForbidden());
         }
     }
 
@@ -232,7 +240,7 @@ class ContentAccessControllerTest {
         void downloadsAreNoStore() throws Exception {
             acl.grant(Permission.VIEW, Permission.DOWNLOAD);
 
-            mvc.perform(get("/c/" + contentRef))
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download"))
                     .andExpect(header().string("Cache-Control",
                             org.hamcrest.Matchers.containsString("no-store")));
         }
@@ -242,7 +250,7 @@ class ContentAccessControllerTest {
         void filenameOnlyInAnAuthorizedDownload() throws Exception {
             acl.grant(Permission.VIEW, Permission.DOWNLOAD);
 
-            mvc.perform(get("/c/" + contentRef))
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download"))
                     .andExpect(header().string("Content-Disposition",
                             org.hamcrest.Matchers.containsString(FILENAME)));
         }
@@ -252,7 +260,7 @@ class ContentAccessControllerTest {
         void errorsCarryNoContent() throws Exception {
             acl.grant(Permission.VIEW);
 
-            String body = mvc.perform(get("/c/" + contentRef))
+            String body = mvc.perform(get("/api/v1/content/" + contentRef + "/download"))
                     .andExpect(status().isForbidden())
                     .andReturn().getResponse().getContentAsString();
 
@@ -296,7 +304,7 @@ class ContentAccessControllerTest {
         @DisplayName("a denial is recorded as prominently as a success")
         void denialsAreAudited() throws Exception {
             acl.grant(Permission.VIEW);
-            mvc.perform(get("/c/" + contentRef));
+            mvc.perform(get("/api/v1/content/" + contentRef + "/download"));
 
             // A rising denial rate against one reference is what a shared link looks like from
             // the inside, so these are the events most worth keeping.

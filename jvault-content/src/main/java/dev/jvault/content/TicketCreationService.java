@@ -184,28 +184,21 @@ public final class TicketCreationService {
                 .anyMatch(part -> resolve(command, part.fieldKey())
                         .linkPlacements().contains(LinkPlacement.REMOTE_LINK));
 
-        if (anyLinked) {
-            // One link for the ticket rather than one per part. Somebody reading the issue wants
-            // "show me what is missing from this", and a ticket with four secured fields would
-            // otherwise put four indistinguishable links on it.
-            //
-            // globalId makes the write idempotent: Jira upserts on it, so a retry updates the
-            // existing link rather than adding a second (docs/00-verified-capabilities.md 0.6).
-            long securedParts = storedParts.stream()
-                    .filter(part -> resolve(command, part.fieldKey()).isExternallyStored())
-                    .count();
+        // A surrogate that already says where the content went is the reference, and a remote
+        // link beside it would be a second name for the same place — the reader has to open
+        // both to learn they are the same. The link belongs in the text somebody is already
+        // reading; the remote link is what stands in when no surrogate carries one, which is
+        // the case for a ticket whose only secured part is an attachment.
+        String ticketLink = links.linkToTicket(ticket.ticketRef());
+        boolean alreadyReferenced = ticket.jiraFields().values().stream()
+                .anyMatch(value -> value != null && value.contains(ticketLink));
 
+        if (anyLinked && !alreadyReferenced) {
+            // One reference for the ticket, and only one: see VaultReference.
             effects.add(outbox.append(OutboxEntry.pending(ticket.ticketRef(),
                     command.deploymentId(), lane, JiraOperation.UPSERT_REMOTE_LINK,
-                    "remote-link:ticket",
-                    Map.of("globalId", "jvault:ticket:" + ticket.ticketRef(),
-                            "url", links.linkToTicket(ticket.ticketRef()),
-                            "title", "Secured content in jvault",
-                            // Counts, never names: a link title is visible to anyone who can see
-                            // the issue, which is a wider audience than the content's.
-                            "summary", securedParts == 1
-                                    ? "1 field is held in jvault"
-                                    : securedParts + " fields are held in jvault"),
+                    VaultReference.EFFECT_KEY,
+                    VaultReference.payload(ticket.ticketRef(), ticketLink),
                     identity, clock.instant())));
         }
         return effects;

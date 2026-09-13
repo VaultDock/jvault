@@ -121,6 +121,28 @@ class JiraRequestMapperTest {
         }
 
         @Test
+        @DisplayName("a web address in the text arrives as a link somebody can follow")
+        void urlsBecomeLinks() throws Exception {
+            JiraSafePayload payload = sanitise(request(JiraOperation.CREATE_ISSUE)
+                    .field("summary", "x")
+                    .field("description",
+                            "=== SECURED ===\nRead it at https://jvault.example.com/t/abc123.",
+                            JiraFieldEncoding.RICH_TEXT));
+
+            JsonNode inline = bodyOf(cloud, payload).at("/fields/description/content/0/content");
+
+            // The surrogate exists to say where the content went, which it does badly if the
+            // address is text the reader has to retype.
+            JsonNode link = inline.get(3);
+            assertThat(link.at("/marks/0/type").asText()).isEqualTo("link");
+            // The full stop ends the sentence; it is not part of the address.
+            assertThat(link.at("/marks/0/attrs/href").asText())
+                    .isEqualTo("https://jvault.example.com/t/abc123");
+            assertThat(link.get("text").asText()).isEqualTo("https://jvault.example.com/t/abc123");
+            assertThat(inline.get(4).get("text").asText()).isEqualTo(".");
+        }
+
+        @Test
         @DisplayName("a single newline is a hard break, not a new paragraph")
         void singleNewlineIsAHardBreak() throws Exception {
             JiraSafePayload payload = sanitise(request(JiraOperation.CREATE_ISSUE)

@@ -148,12 +148,21 @@ public final class TicketAmendmentService {
             throw new IllegalStateException("attachment policy for " + ticket.projectKey()
                     + " places content externally but declares no remote link");
         }
+
+        // The ticket's own reference, not one for this attachment — and only when the issue does
+        // not already carry one. A secured description says where its content went, and the
+        // attachment is in the same place, so there is nothing further to tell Jira. Where no
+        // field says it, this is how the issue gets linked at all (see VaultReference).
+        String ticketLink = links.linkToTicket(ticket.ticketRef());
+        boolean alreadyReferenced = ticket.jiraFields().values().stream()
+                .anyMatch(value -> value != null && value.contains(ticketLink));
+        if (alreadyReferenced) {
+            return null;
+        }
+
         return outbox.append(OutboxEntry.pending(ticket.ticketRef(), ticket.deploymentId(),
-                laneFor(ticket), JiraOperation.UPSERT_REMOTE_LINK,
-                "remote-link:" + stored.contentRef(),
-                Map.of("contentRef", stored.contentRef(),
-                        "globalId", "jvault:content:" + stored.contentRef(),
-                        "url", links.linkTo(stored.contentRef())),
+                laneFor(ticket), JiraOperation.UPSERT_REMOTE_LINK, VaultReference.EFFECT_KEY,
+                VaultReference.payload(ticket.ticketRef(), ticketLink),
                 identityOf(ticket), clock.instant()));
     }
 
@@ -204,6 +213,11 @@ public final class TicketAmendmentService {
     public record CommentResult(CommentRecord comment, ContentRecord storedBody, OutboxEntry effect) {
     }
 
+    /**
+     * @param effect the Jira write this attachment needs, or {@code null} when it needs none —
+     *               the issue already points at the ticket, and one reference is the whole of
+     *               what Jira is told (see {@link VaultReference})
+     */
     public record AttachmentResult(ContentRecord stored, String surrogate, OutboxEntry effect) {
     }
 }

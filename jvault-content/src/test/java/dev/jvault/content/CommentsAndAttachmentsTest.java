@@ -194,6 +194,25 @@ class CommentsAndAttachmentsTest {
         }
 
         @Test
+        @DisplayName("three attachments still leave the issue with one link to jvault")
+        void attachmentsShareTheTicketsOneReference() {
+            for (int i = 1; i <= 3; i++) {
+                amendments.addAttachment(ticketRef, "evidence-" + i + ".pcap",
+                        new ByteArrayInputStream("x".repeat(64).getBytes(StandardCharsets.UTF_8)),
+                        "application/vnd.tcpdump.pcap", 64);
+            }
+
+            // Not three links that look identical and point at places the reader cannot tell
+            // apart: one link, to the ticket, which is where all three actually are.
+            List<JiraSafePayload> links = dispatchAll().stream()
+                    .filter(p -> p.operation() == JiraOperation.UPSERT_REMOTE_LINK)
+                    .toList();
+            assertThat(links).hasSize(1);
+            assertThat(links.get(0).textFields().get("globalId"))
+                    .isEqualTo("jvault:ticket:" + ticketRef);
+        }
+
+        @Test
         @DisplayName("the filename never leaves jvault")
         void filenameIsNeverExposed() throws Exception {
             TicketAmendmentService.AttachmentResult result = amendments.addAttachment(
@@ -206,11 +225,13 @@ class CommentsAndAttachmentsTest {
             assertThat(result.stored().storedObject().key().asPath()).doesNotContain("incident");
             assertThat(rawBytesOnDisk()).doesNotContain(EVIDENCE_FILENAME);
 
+            // The link is the ticket's one reference, so its title says nothing about any
+            // particular part — least of all what the part is called.
             String linkTitle = dispatchAll().stream()
                     .filter(p -> p.operation() == JiraOperation.UPSERT_REMOTE_LINK)
                     .findFirst().orElseThrow()
                     .textFields().get("title");
-            assertThat(linkTitle).doesNotContain(EVIDENCE_FILENAME).contains("attachment");
+            assertThat(linkTitle).doesNotContain(EVIDENCE_FILENAME).contains("jvault");
         }
 
         @Test

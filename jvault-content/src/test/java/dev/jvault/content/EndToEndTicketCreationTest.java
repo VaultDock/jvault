@@ -153,6 +153,25 @@ class EndToEndTicketCreationTest {
         }
 
         @Test
+        @DisplayName("a surrogate that already links the ticket is the one reference")
+        void surrogateLinkReplacesTheRemoteLink() {
+            var creationWithTicketLink = new TicketCreationService(
+                    policiesLinkingTheTicket(), contentService, tickets, outbox,
+                    new LinkFactory("https://jvault.example.com"),
+                    ContentService.IdGenerator.random(), clock);
+
+            TicketCreationService.Result result =
+                    creationWithTicketLink.create(incidentCommand());
+
+            // The description says where the content went. A remote link beside it would be a
+            // second name for the same place, and the reader has to open both to find that out.
+            assertThat(result.effects()).extracting(OutboxEntry::effectKey)
+                    .containsExactly("create-issue");
+            assertThat(result.ticket().jiraFields().get("description"))
+                    .contains("/t/" + result.ticket().ticketRef());
+        }
+
+        @Test
         @DisplayName("the create effect carries what the ambiguity protocol will need")
         void createEffectCarriesRecoveryContext() {
             TicketCreationService.Result result = creation.create(incidentCommand());
@@ -354,6 +373,26 @@ class EndToEndTicketCreationTest {
                 .correlationId("corr-8f21c")
                 .origin(TicketCommand.Origin.kafka("soc-analyst@example.com",
                         "INTEGRATION:svc-jvault"));
+    }
+
+    /** As {@link #policies()}, except that the surrogate points at the ticket itself. */
+    private PolicySet policiesLinkingTheTicket() {
+        return PolicySet.of(List.of(
+                PlacementPolicy.builder()
+                        .id("sec-incident-description")
+                        .selector(new PolicySelector(DEPLOYMENT, "SEC", "10004",
+                                PartType.DESCRIPTION, null))
+                        .placement(Placement.EXTERNAL)
+                        .classification(Classification.RESTRICTED)
+                        .storageRoute("obj-dc1-restricted")
+                        .keyRing(KEY_RING)
+                        .encryptionRequired(true)
+                        .surrogate(SurrogateSpec.placeholder(
+                                "=== SECURED ===\nRead it at {{ticketLink}}"))
+                        .linkPlacements(Set.of(LinkPlacement.DESCRIPTION_PLACEHOLDER,
+                                LinkPlacement.REMOTE_LINK))
+                        .allowOverride(false)
+                        .build()));
     }
 
     private PolicySet policies() {
