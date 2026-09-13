@@ -10,13 +10,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * One table, asked two different ways.
  *
- * <p>The form asks with a schema in hand, because create metadata told it one. The payload
- * assembler asks with only a field key, because a ticket sitting in the outbox has to dispatch
- * whether or not Jira's metadata endpoint is reachable.
+ * <p>The form asks with a schema in hand, because create metadata told it one. A caller with
+ * only a field key gets the same answer for every system field, and when it did not, the symptom
+ * was a form that looked right and a create Jira refused.
  *
- * <p>Those two answers must agree for every system field, and when they did not, the symptom was
- * a form that looked right and a create Jira refused. The key-only path is the one that reaches
- * Jira, so it is the one that has to know.
+ * <p>For a custom field the key answers nothing — {@code customfield_10021} is a checkbox group
+ * on one deployment and a date on another — which is why the assembler asks Jira rather than the
+ * key (see {@code JiraFieldEncodings}). What the key path still owes is that it never contradicts
+ * the schema path where it does have an answer.
  */
 class JiraFieldEncodingTest {
 
@@ -36,8 +37,8 @@ class JiraFieldEncodingTest {
     })
     @DisplayName("both paths agree")
     void bothPathsAgree(String fieldKey, String schemaType, String expected) {
-        JiraFieldEncoding withSchema = JiraFieldEncoding.forField(schemaType, null, fieldKey);
-        JiraFieldEncoding keyOnly = JiraFieldEncoding.forField(null, null, fieldKey);
+        JiraFieldEncoding withSchema = JiraFieldEncoding.forField(schemaType, null, null, fieldKey);
+        JiraFieldEncoding keyOnly = JiraFieldEncoding.forField(null, null, null, fieldKey);
 
         assertThat(withSchema).isEqualTo(JiraFieldEncoding.valueOf(expected));
         assertThat(keyOnly)
@@ -45,14 +46,49 @@ class JiraFieldEncodingTest {
                 .isEqualTo(withSchema);
     }
 
+    @ParameterizedTest(name = "an array of {0} is {1}")
+    @CsvSource({
+            "string,    STRING_ARRAY",
+            "option,    ID_OBJECT_ARRAY",
+            "component, ID_OBJECT_ARRAY",
+            "version,   ID_OBJECT_ARRAY",
+            "group,     ID_OBJECT_ARRAY",
+            "user,      ACCOUNT_OBJECT_ARRAY",
+    })
+    @DisplayName("what an array holds decides its shape")
+    void arrayShapeFollowsItsItems(String items, String expected) {
+        // Both are "array" to Jira's schema type. Sent as the wrong one, the field is rejected:
+        // an array of strings where objects were wanted, or objects where strings were.
+        assertThat(JiraFieldEncoding.forField("array", items, null, "customfield_10021"))
+                .isEqualTo(JiraFieldEncoding.valueOf(expected));
+    }
+
+    @Test
+    @DisplayName("an array whose items Jira does not name is an array of strings")
+    void arrayWithoutItemsIsStrings() {
+        // Which is what "array" meant before the item type could be asked for, so no deployment
+        // that worked before this stops working because of it.
+        assertThat(JiraFieldEncoding.forField("array", null, null, "customfield_10021"))
+                .isEqualTo(JiraFieldEncoding.STRING_ARRAY);
+    }
+
+    @Test
+    @DisplayName("a checkbox group is an array of options, whatever its key")
+    void multiCheckboxesAreOptions() {
+        // The bug this table was extended for: Jira wants [{"id": "10019"}] and was sent
+        // "10019", which it refused for not being an array at all.
+        assertThat(JiraFieldEncoding.forField("array", "option", "multicheckboxes",
+                "customfield_10021")).isEqualTo(JiraFieldEncoding.ID_OBJECT_ARRAY);
+    }
+
     @Test
     @DisplayName("an unrecognised field is a string, which earns a named error rather than a guess")
     void unknownFieldsAreStrings() {
-        assertThat(JiraFieldEncoding.forField(null, null, "customfield_99999"))
+        assertThat(JiraFieldEncoding.forField(null, null, null, "customfield_99999"))
                 .isEqualTo(JiraFieldEncoding.STRING);
         // A wrong string produces a field-level error from Jira naming the field. A guessed
         // object shape produces a rejection that names nothing useful.
-        assertThat(JiraFieldEncoding.forField("any", "some-app-field", "customfield_99999"))
+        assertThat(JiraFieldEncoding.forField("any", null, "some-app-field", "customfield_99999"))
                 .isEqualTo(JiraFieldEncoding.STRING);
     }
 }

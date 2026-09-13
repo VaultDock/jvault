@@ -38,15 +38,25 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
     private final CommentRepository comments;
     private final ContentMetadataRepository metadata;
     private final ContentService contentService;
+    private final JiraFieldEncodings encodings;
 
     public TicketPayloadAssembler(TicketRepository tickets,
                                   CommentRepository comments,
                                   ContentMetadataRepository metadata,
                                   ContentService contentService) {
+        this(tickets, comments, metadata, contentService, JiraFieldEncodings.byFieldKey());
+    }
+
+    public TicketPayloadAssembler(TicketRepository tickets,
+                                  CommentRepository comments,
+                                  ContentMetadataRepository metadata,
+                                  ContentService contentService,
+                                  JiraFieldEncodings encodings) {
         this.tickets = Objects.requireNonNull(tickets, "tickets");
         this.comments = Objects.requireNonNull(comments, "comments");
         this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.contentService = Objects.requireNonNull(contentService, "contentService");
+        this.encodings = Objects.requireNonNull(encodings, "encodings");
     }
 
     @Override
@@ -64,11 +74,11 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
                 builder.field("project", ticket.projectKey(), JiraFieldEncoding.KEY_OBJECT);
                 builder.field("issuetype", ticket.issueTypeId(), JiraFieldEncoding.ID_OBJECT);
                 ticket.jiraFields().forEach((key, value) ->
-                        builder.field(key, value, encodingFor(key)));
+                        builder.field(key, value, encodingFor(ticket, key)));
                 builder.property("jvault.origin", originJson(ticket));
             }
             case UPDATE_FIELDS -> ticket.jiraFields().forEach((key, value) ->
-                    builder.field(key, value, encodingFor(key)));
+                    builder.field(key, value, encodingFor(ticket, key)));
             case UPSERT_REMOTE_LINK -> {
                 // Jira upserts on globalId, so replaying this effect updates the existing link
                 // rather than adding a second (verified: docs/00-verified-capabilities.md 0.6).
@@ -143,8 +153,8 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
      * still dispatch when Jira's metadata endpoint is unreachable. The same table answers the
      * richer question when the form asks it with a schema in hand, so the two cannot drift.
      */
-    private static JiraFieldEncoding encodingFor(String fieldKey) {
-        return JiraFieldEncoding.forField(null, null, fieldKey);
+    private JiraFieldEncoding encodingFor(TicketRecord ticket, String fieldKey) {
+        return encodings.encodingFor(ticket.projectKey(), ticket.issueTypeId(), fieldKey);
     }
 
     /**

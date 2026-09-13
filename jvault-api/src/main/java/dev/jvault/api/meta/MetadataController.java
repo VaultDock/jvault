@@ -172,12 +172,16 @@ public class MetadataController {
         if ("issuelink".equals(field.schemaType())) {
             return Control.ISSUE;
         }
-        return switch (JiraFieldEncoding.forField(
-                field.schemaType(), field.customType(), field.key())) {
+        return switch (JiraFieldEncoding.forField(field.schemaType(), field.schemaItems(),
+                field.customType(), field.key())) {
             case RICH_TEXT -> Control.RICH_TEXT;
             case NUMBER -> Control.NUMBER;
             case STRING_ARRAY -> Control.LABELS;
-            case ACCOUNT_OBJECT -> Control.USER;
+            case ACCOUNT_OBJECT, ACCOUNT_OBJECT_ARRAY -> Control.USER;
+            // An options field whose options Jira did not enumerate. There is nothing to put in
+            // a select, so it is a text box and Jira validates what goes in it — which is the
+            // same bargain the rest of this table makes.
+            case ID_OBJECT_ARRAY -> Control.LABELS;
             case ID_OBJECT, KEY_OBJECT, STRING -> Control.TEXT;
         };
     }

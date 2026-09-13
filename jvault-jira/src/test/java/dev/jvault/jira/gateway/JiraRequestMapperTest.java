@@ -121,6 +121,36 @@ class JiraRequestMapperTest {
         }
 
         @Test
+        @DisplayName("a checkbox group is a list of objects, not a string and not a list of them")
+        void optionArraysAreObjects() throws Exception {
+            JiraSafePayload payload = sanitise(request(JiraOperation.CREATE_ISSUE)
+                    .field("summary", "x")
+                    .field("customfield_10021", "10019, 10020",
+                            JiraFieldEncoding.ID_OBJECT_ARRAY));
+
+            JsonNode flagged = bodyOf(cloud, payload).at("/fields/customfield_10021");
+
+            assertThat(flagged.isArray()).isTrue();
+            assertThat(flagged.get(0).get("id").asText()).isEqualTo("10019");
+            // The space after the comma is typing, not part of the id.
+            assertThat(flagged.get(1).get("id").asText()).isEqualTo("10020");
+        }
+
+        @Test
+        @DisplayName("a multi-user field carries account ids, one object each")
+        void userArraysAreAccountObjects() throws Exception {
+            JiraSafePayload payload = sanitise(request(JiraOperation.CREATE_ISSUE)
+                    .field("summary", "x")
+                    .field("customfield_10030", "5b10a2,5b10a3",
+                            JiraFieldEncoding.ACCOUNT_OBJECT_ARRAY));
+
+            JsonNode people = bodyOf(cloud, payload).at("/fields/customfield_10030");
+
+            assertThat(people.get(0).get("accountId").asText()).isEqualTo("5b10a2");
+            assertThat(people.get(1).get("accountId").asText()).isEqualTo("5b10a3");
+        }
+
+        @Test
         @DisplayName("a web address in the text arrives as a link somebody can follow")
         void urlsBecomeLinks() throws Exception {
             JiraSafePayload payload = sanitise(request(JiraOperation.CREATE_ISSUE)

@@ -2,7 +2,9 @@ package dev.jvault.api.config;
 
 import dev.jvault.content.CommentRepository;
 import dev.jvault.content.ContentMetadataRepository;
+import dev.jvault.api.jira.CreateMetaFieldEncodings;
 import dev.jvault.content.ContentService;
+import dev.jvault.content.JiraFieldEncodings;
 import dev.jvault.content.RepositoryTicketStateSink;
 import dev.jvault.content.TicketPayloadAssembler;
 import dev.jvault.content.TicketRepository;
@@ -11,6 +13,7 @@ import dev.jvault.jira.deployment.JiraDeployment;
 import dev.jvault.jira.egress.EgressGuard;
 import dev.jvault.jira.egress.PatternContentClassifier;
 import dev.jvault.jira.gateway.HttpJiraWriteGateway;
+import dev.jvault.jira.gateway.JiraMetadataGateway;
 import dev.jvault.jira.gateway.JiraHttpClient;
 import dev.jvault.jira.gateway.JiraWriteGateway;
 import dev.jvault.outbox.DispatchReport;
@@ -75,12 +78,24 @@ public class OutboxDispatchConfiguration {
         return new EgressGuard(PatternContentClassifier.withDefaults(), Classification.INTERNAL);
     }
 
+    /**
+     * What shape each field's value takes, asked of Jira rather than guessed from its key.
+     *
+     * <p>Five minutes of cache: long enough that a dispatch pass asks once, short enough that a
+     * field an administrator retyped is picked up without a restart.
+     */
+    @Bean
+    public JiraFieldEncodings jiraFieldEncodings(JiraMetadataGateway metadata, Clock clock) {
+        return new CreateMetaFieldEncodings(metadata, clock, Duration.ofMinutes(5));
+    }
+
     @Bean
     public JiraPayloadAssembler jiraPayloadAssembler(TicketRepository tickets,
                                                      CommentRepository comments,
                                                      ContentMetadataRepository metadata,
-                                                     ContentService content) {
-        return new TicketPayloadAssembler(tickets, comments, metadata, content);
+                                                     ContentService content,
+                                                     JiraFieldEncodings encodings) {
+        return new TicketPayloadAssembler(tickets, comments, metadata, content, encodings);
     }
 
     @Bean

@@ -98,6 +98,10 @@ public interface JiraMetadataGateway extends UserDirectory {
      * One field as Jira describes it.
      *
      * @param schemaType   Jira's own type — {@code string}, {@code array}, {@code user}…
+     * @param schemaItems  for an array, what it holds — {@code string}, {@code option},
+     *                     {@code component}… An array of strings and an array of options are
+     *                     different shapes on the wire and Jira rejects one sent as the other,
+     *                     and this is the only thing that distinguishes them
      * @param customType   the custom field type's short name, or {@code null} for a system field
      * @param allowedValues the permitted values, when Jira enumerates them. Large option sets are
      *                      truncated and flagged, because a select with ten thousand options is a
@@ -110,6 +114,7 @@ public interface JiraMetadataGateway extends UserDirectory {
                      String name,
                      boolean required,
                      String schemaType,
+                     String schemaItems,
                      String customType,
                      List<AllowedValue> allowedValues,
                      boolean hasMoreOptions,

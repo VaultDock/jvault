@@ -256,6 +256,7 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
                 field.path("name").asText(null),
                 field.path("required").asBoolean(false),
                 schema.path("type").asText(null),
+                schema.path("items").asText(null),
                 custom == null ? null : custom.substring(custom.lastIndexOf(':') + 1),
                 allowed, hasMore, operations);
     }

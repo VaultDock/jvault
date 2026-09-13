@@ -11,6 +11,8 @@ import dev.jvault.jira.egress.JiraFieldEncoding;
 import dev.jvault.jira.egress.JiraOperation;
 import dev.jvault.jira.egress.JiraSafePayload;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -141,15 +143,44 @@ public final class JiraRequestMapper {
             case NUMBER -> numberOrText(value);
             case STRING_ARRAY -> {
                 ArrayNode array = NODES.arrayNode();
-                for (String item : value.split(",")) {
-                    String trimmed = item.trim();
-                    if (!trimmed.isEmpty()) {
-                        array.add(trimmed);
-                    }
+                for (String item : items(value)) {
+                    array.add(item);
+                }
+                yield array;
+            }
+            case ID_OBJECT_ARRAY -> {
+                ArrayNode array = NODES.arrayNode();
+                for (String item : items(value)) {
+                    array.add(NODES.objectNode().put("id", item));
+                }
+                yield array;
+            }
+            case ACCOUNT_OBJECT_ARRAY -> {
+                ArrayNode array = NODES.arrayNode();
+                for (String item : items(value)) {
+                    array.add(NODES.objectNode().put("accountId", item));
                 }
                 yield array;
             }
         };
+    }
+
+    /**
+     * The elements of a multi-valued field.
+     *
+     * <p>Comma-separated, which is what the form sends and what every array encoding here
+     * splits on. Empty elements are dropped rather than sent: a trailing comma is a typing
+     * artefact, and an empty option id is a field error waiting to happen.
+     */
+    private static List<String> items(String value) {
+        var found = new ArrayList<String>();
+        for (String item : value.split(",")) {
+            String trimmed = item.trim();
+            if (!trimmed.isEmpty()) {
+                found.add(trimmed);
+            }
+        }
+        return found;
     }
 
     private static JsonNode numberOrText(String value) {

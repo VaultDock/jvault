@@ -32,8 +32,21 @@ public enum JiraFieldEncoding {
     /** {@code {"accountId": value}} — users on Cloud. */
     ACCOUNT_OBJECT,
 
-    /** A comma-separated value becoming a JSON array of strings. Labels, components. */
+    /** A comma-separated value becoming a JSON array of strings. Labels. */
     STRING_ARRAY,
+
+    /**
+     * {@code [{"id": value}, …]} — a multi-select, a checkbox group, components, fix versions.
+     *
+     * <p>Indistinguishable from {@link #STRING_ARRAY} by schema type alone: both are
+     * {@code "array"}, and what separates them is what the array holds. Sent as an array of
+     * strings, Jira rejects the field with a type error; sent as a bare string it rejects it
+     * for not being an array at all.
+     */
+    ID_OBJECT_ARRAY,
+
+    /** {@code [{"accountId": value}, …]} — a multi-user picker, request participants. */
+    ACCOUNT_OBJECT_ARRAY,
 
     /** A number rather than a string. */
     NUMBER;
@@ -49,11 +62,14 @@ public enum JiraFieldEncoding {
      * a wrong string produces a field-level error from Jira naming the field, whereas a guessed
      * object shape produces a rejection that names nothing useful.
      *
-     * @param schemaType Jira's schema type, or {@code null} when it is not known
-     * @param customType the custom field type's short name, or {@code null} for a system field
-     * @param fieldKey   the field id, which for system fields is the system name
+     * @param schemaType  Jira's schema type, or {@code null} when it is not known
+     * @param schemaItems for an array, what it holds, or {@code null}. The difference between a
+     *                    list of labels and a list of options is here and nowhere else
+     * @param customType  the custom field type's short name, or {@code null} for a system field
+     * @param fieldKey    the field id, which for system fields is the system name
      */
-    public static JiraFieldEncoding forField(String schemaType, String customType, String fieldKey) {
+    public static JiraFieldEncoding forField(String schemaType, String schemaItems,
+                                             String customType, String fieldKey) {
         if (customType != null) {
             JiraFieldEncoding byCustomType = switch (customType) {
                 case "textarea" -> RICH_TEXT;
@@ -61,7 +77,9 @@ public enum JiraFieldEncoding {
                 case "labels" -> STRING_ARRAY;
                 case "datepicker", "datetime", "textfield", "url", "readonlyfield" -> STRING;
                 case "select", "radiobuttons", "cascadingselect" -> ID_OBJECT;
+                case "multiselect", "multicheckboxes", "multiversion" -> ID_OBJECT_ARRAY;
                 case "userpicker" -> ACCOUNT_OBJECT;
+                case "multiuserpicker" -> ACCOUNT_OBJECT_ARRAY;
                 default -> null;
             };
             if (byCustomType != null) {
@@ -74,6 +92,7 @@ public enum JiraFieldEncoding {
                 case "description", "environment" -> RICH_TEXT;
                 case "labels" -> STRING_ARRAY;
                 case "priority", "issuetype", "resolution", "security" -> ID_OBJECT;
+                case "components", "fixVersions", "versions" -> ID_OBJECT_ARRAY;
                 // Field keys, not schema names: "issuelink" belongs in the switch below and was
                 // briefly here, where nothing is called that — so `parent` matched neither table
                 // and was sent to Jira as a bare string.
@@ -95,9 +114,15 @@ public enum JiraFieldEncoding {
             // A parent, an epic link, a blocked-by: Jira names the issue, not its id.
             case "project", "issuelink" -> KEY_OBJECT;
             case "priority", "issuetype", "resolution", "option", "securitylevel" -> ID_OBJECT;
-            // An array of plain strings. An array of options would need a shape this enum does
-            // not have; sending it as a string earns a named error rather than a silent mangling.
-            case "array" -> STRING_ARRAY;
+            // What the array holds decides its shape. Jira reports it, and the one case where
+            // it does not — an array of nothing in particular — is treated as strings, which is
+            // what "array" meant before this could be asked.
+            case "array" -> switch (schemaItems == null ? "string" : schemaItems) {
+                case "user" -> ACCOUNT_OBJECT_ARRAY;
+                case "option", "component", "version", "group", "priority", "resolution",
+                     "issuetype" -> ID_OBJECT_ARRAY;
+                default -> STRING_ARRAY;
+            };
             default -> STRING;
         };
     }
