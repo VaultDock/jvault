@@ -124,19 +124,12 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
     /**
      * How a field's stored string becomes JSON.
      *
-     * <p>A deliberately small table for now. The complete answer comes from create metadata —
-     * which knows that a given custom field is a select rather than a string — and arrives with
-     * the dynamic form. Until then anything unrecognised is sent as a string, which produces a
-     * field-level error from Jira naming the field rather than a silent mis-encoding.
+     * <p>By key alone here, because a ticket that has been sitting in the outbox for an hour must
+     * still dispatch when Jira's metadata endpoint is unreachable. The same table answers the
+     * richer question when the form asks it with a schema in hand, so the two cannot drift.
      */
     private static JiraFieldEncoding encodingFor(String fieldKey) {
-        return switch (fieldKey) {
-            case "description", "environment" -> JiraFieldEncoding.RICH_TEXT;
-            case "labels" -> JiraFieldEncoding.STRING_ARRAY;
-            case "priority" -> JiraFieldEncoding.ID_OBJECT;
-            case "assignee", "reporter" -> JiraFieldEncoding.ACCOUNT_OBJECT;
-            default -> JiraFieldEncoding.STRING;
-        };
+        return JiraFieldEncoding.forField(null, null, fieldKey);
     }
 
     /**

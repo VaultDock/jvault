@@ -130,6 +130,20 @@ class MetadataControllerTest {
     }
 
     @Test
+    @DisplayName("the control to render comes from the same table the payload is encoded with")
+    void controlsMatchTheEncoding() throws Exception {
+        String body = fields();
+
+        // If these two ever disagree, the user fills the form in correctly and Jira rejects it.
+        assertThat(field(body, "description").get("control").asText()).isEqualTo("RICH_TEXT");
+        assertThat(field(body, "summary").get("control").asText()).isEqualTo("TEXT");
+        assertThat(field(body, "priority").get("control").asText()).isEqualTo("SELECT");
+        assertThat(field(body, "customfield_10015").get("control").asText()).isEqualTo("DATE");
+        assertThat(field(body, "labels").get("control").asText()).isEqualTo("LABELS");
+        assertThat(field(body, "assignee").get("control").asText()).isEqualTo("USER");
+    }
+
+    @Test
     @DisplayName("an anonymous caller gets 401")
     void anonymousIsRefused() throws Exception {
         caller.set(null);
@@ -188,6 +202,10 @@ class MetadataControllerTest {
                         new FieldMeta("summary", "Summary", true, "string", null,
                                 List.of(), false, List.of("set")),
                         new FieldMeta("description", "Description", false, "string", null,
+                                List.of(), false, List.of("set")),
+                        new FieldMeta("labels", "Labels", false, "array", null,
+                                List.of(), false, List.of("set", "add", "remove")),
+                        new FieldMeta("assignee", "Assignee", false, "user", null,
                                 List.of(), false, List.of("set")),
                         new FieldMeta("priority", "Priority", false, "priority", null,
                                 List.of(new AllowedValue("1", "Highest"),

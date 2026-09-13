@@ -1,0 +1,174 @@
+:root {
+  --text: #172b4d;
+  --muted: #5e6c84;
+  --line: #dfe1e6;
+  --accent: #0052cc;
+  --external: #6554c0;
+  --danger: #bf2600;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--text);
+}
+
+main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 4rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+.chooser {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.field {
+  margin-bottom: 1.25rem;
+}
+
+.field > label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.field__required {
+  color: var(--danger);
+}
+
+.field__annotations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.field input:disabled,
+.field select:disabled {
+  background: #f4f5f7;
+  color: var(--muted);
+}
+
+.field--error input,
+.field--error select,
+.field--error .richtext {
+  border-color: var(--danger);
+}
+
+.field__errorText {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--danger);
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  background: #eae6ff;
+  color: var(--external);
+}
+
+.badge--both {
+  background: #deebff;
+  color: var(--accent);
+}
+
+.badge__detail {
+  color: var(--muted);
+}
+
+.notice,
+.summaryNotice {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.summaryNotice {
+  padding: 0.5rem 0.75rem;
+  background: #f4f5f7;
+  border-radius: 3px;
+}
+
+.formError {
+  color: var(--danger);
+}
+
+.richtext {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.richtext__toolbar {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.richtext__toolbar button {
+  min-width: 2rem;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.richtext__toolbar button[aria-pressed='true'] {
+  background: #deebff;
+  border-color: var(--accent);
+}
+
+.richtext__body .ProseMirror {
+  min-height: 8rem;
+  padding: 0.5rem;
+  outline: none;
+}
+
+.created dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+}
+
+.created dt {
+  color: var(--muted);
+}
+
+button[type='submit'] {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 3px;
+  background: var(--accent);
+  color: white;
+  font: inherit;
+  cursor: pointer;
+}
+
+button[type='submit']:disabled {
+  background: var(--muted);
+}

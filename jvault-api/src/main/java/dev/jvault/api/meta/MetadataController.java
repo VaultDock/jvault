@@ -8,6 +8,7 @@ import dev.jvault.domain.placement.PlacementContext;
 import dev.jvault.domain.placement.PlacementResolver;
 import dev.jvault.domain.placement.PolicySet;
 import dev.jvault.domain.placement.ResolvedPlacement;
+import dev.jvault.jira.egress.JiraFieldEncoding;
 import dev.jvault.jira.gateway.JiraMetadataGateway;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -93,7 +94,33 @@ public class MetadataController {
                 placement.placement().name(),
                 placement.isExternallyStored() ? placement.classification().name() : null,
                 placement.allowOverride(),
-                supportLevelOf(field).name());
+                supportLevelOf(field).name(),
+                controlFor(field).name());
+    }
+
+    /**
+     * Which control the form should render.
+     *
+     * <p>Derived from the same encoding table the payload uses, so the widget that collects a
+     * value and the JSON that carries it cannot disagree about what the value is. A date picker
+     * feeding a field Jira reads as a user account is the kind of mismatch that only shows up as
+     * a rejection at submit time.
+     */
+    private static Control controlFor(JiraMetadataGateway.FieldMeta field) {
+        if (!field.allowedValues().isEmpty()) {
+            return "array".equals(field.schemaType()) ? Control.MULTI_SELECT : Control.SELECT;
+        }
+        if ("date".equals(field.schemaType()) || "datetime".equals(field.schemaType())) {
+            return Control.DATE;
+        }
+        return switch (JiraFieldEncoding.forField(
+                field.schemaType(), field.customType(), field.key())) {
+            case RICH_TEXT -> Control.RICH_TEXT;
+            case NUMBER -> Control.NUMBER;
+            case STRING_ARRAY -> Control.LABELS;
+            case ACCOUNT_OBJECT -> Control.USER;
+            case ID_OBJECT, KEY_OBJECT, STRING -> Control.TEXT;
+        };
     }
 
     /**
@@ -153,6 +180,11 @@ public class MetadataController {
         READ_ONLY
     }
 
+    /** The widget the form renders. Not a type — a type has many possible widgets. */
+    public enum Control {
+        TEXT, RICH_TEXT, NUMBER, DATE, SELECT, MULTI_SELECT, LABELS, USER
+    }
+
     public record FormDefinition(String projectKey, String issueTypeId, List<FormField> fields) {
     }
 
@@ -173,6 +205,7 @@ public class MetadataController {
                             String placement,
                             String classification,
                             boolean allowOverride,
-                            String supportLevel) {
+                            String supportLevel,
+                            String control) {
     }
 }

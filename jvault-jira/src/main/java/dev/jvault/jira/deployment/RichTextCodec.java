@@ -1,9 +1,11 @@
 package dev.jvault.jira.deployment;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import dev.jvault.jira.egress.AdfSanitizer;
 
 import java.util.Objects;
 
@@ -41,16 +43,27 @@ public interface RichTextCodec {
      *
      * <p>This is deliberately a <em>writer</em> for plain text, not a Markdown converter. A
      * half-hearted Markdown parser here would silently mangle text containing asterisks or
-     * underscores, and the real editor produces ADF directly anyway (docs/02-jira-parity-scope.md
-     * 2.4.4).
+     * underscores (docs/02-jira-parity-scope.md 2.4.4).
+     *
+     * <p>A value that is already an ADF document — which is what the editor produces — is kept as
+     * structure rather than being wrapped in a paragraph as literal JSON. It is rebuilt through
+     * {@link AdfSanitizer} first: the browser filters the same document before sending it, but a
+     * request body is whatever the caller chose to put in it, and rich text is the one field in
+     * the create payload where a caller supplies structure rather than a scalar.
      */
     final class AdfCodec implements RichTextCodec {
 
         private static final JsonNodeFactory NODES = JsonNodeFactory.instance;
+        private static final ObjectMapper JSON = new ObjectMapper();
 
         @Override
         public JsonNode encode(String plainText) {
             Objects.requireNonNull(plainText, "plainText");
+
+            JsonNode structured = asDocument(plainText);
+            if (structured != null) {
+                return AdfSanitizer.sanitize(structured);
+            }
 
             ObjectNode document = NODES.objectNode();
             document.put("version", 1);
@@ -68,6 +81,25 @@ public interface RichTextCodec {
                 content.add(paragraph(block));
             }
             return document;
+        }
+
+        /**
+         * The value as an ADF document, or {@code null} if it is ordinary text.
+         *
+         * <p>The cheap prefix check comes first so that a description which merely opens with a
+         * brace is not run through a JSON parser on every dispatch.
+         */
+        private static JsonNode asDocument(String value) {
+            if (!value.stripLeading().startsWith("{")) {
+                return null;
+            }
+            try {
+                JsonNode parsed = JSON.readTree(value);
+                return AdfSanitizer.isDocument(parsed) ? parsed : null;
+            } catch (Exception e) {
+                // Text that looks like JSON and is not. It is still someone's description.
+                return null;
+            }
         }
 
         private static ObjectNode paragraph(String block) {

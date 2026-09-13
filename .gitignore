@@ -11,3 +11,7 @@ dist/
 .env
 .env.*
 *.token
+
+# SPA build output and dependencies
+node_modules/
+jvault-web/dist/
