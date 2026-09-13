@@ -41,7 +41,7 @@ public final class SqlServerDialect implements SqlDialect {
                     ORDER BY created_at
                 )
                 UPDATE due SET state = 'CLAIMED'
-                OUTPUT """ + OutboxRowMapper.outputColumns("inserted");
+                OUTPUT\s""" + OutboxRowMapper.outputColumns("inserted");
     }
 
     @Override

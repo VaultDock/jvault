@@ -10,6 +10,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import javax.sql.DataSource;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -116,7 +118,18 @@ public final class JdbcOutboxRepository implements OutboxRepository {
         }
         // The transaction is part of the contract, not an optimisation: Oracle's claim is two
         // statements and its row locks must be held across both.
-        return transactions.execute(status -> dialect.claimDue(jdbc, limit, now));
+        List<OutboxEntry> claimed = transactions.execute(status ->
+                dialect.claimDue(jdbc, limit, now));
+
+        // The ORDER BY inside a claim decides *which* rows are taken, not the order they come
+        // back in: neither PostgreSQL's RETURNING nor SQL Server's OUTPUT promises anything about
+        // row order. The dispatcher applies a lane's effects in sequence, so an unordered batch
+        // means an update racing the create it depends on. Ordering here rather than per dialect
+        // makes the guarantee one the next engine cannot be added without.
+        var ordered = new ArrayList<>(claimed == null ? List.<OutboxEntry>of() : claimed);
+        ordered.sort(Comparator.comparing(OutboxEntry::createdAt)
+                .thenComparing(entry -> entry.id().toString()));
+        return List.copyOf(ordered);
     }
 
     @Override

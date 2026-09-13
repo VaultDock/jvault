@@ -32,7 +32,7 @@ public final class PostgresDialect implements SqlDialect {
                     LIMIT ?
                     FOR UPDATE SKIP LOCKED
                 )
-                RETURNING """ + OutboxRowMapper.columns();
+                RETURNING\s""" + OutboxRowMapper.columns();
     }
 
     @Override
