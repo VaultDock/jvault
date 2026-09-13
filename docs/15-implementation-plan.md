@@ -18,11 +18,38 @@ Three unknowns can change the plan materially, so they are resolved first.
 
 | Spike | Question | Outcome that changes the plan |
 |---|---|---|
-| **ADF editor** | Can `@atlaskit/editor-core` be used standalone in a Vite app, with acceptable bundle size, and under licence terms that permit it? Does a corpus of real ADF documents round-trip losslessly? | If no: TipTap/ProseMirror + a jvault ADF serializer. Adds ~3 weeks and costs fidelity on tables, panels, media and mentions (§2.4.4) |
+| ~~**ADF editor**~~ **RESOLVED — use TipTap** | Can `@atlaskit/editor-core` be used standalone in a Vite app, at an acceptable bundle size? | **Measured, and it cannot.** See the numbers below. The fallback becomes the plan: TipTap/ProseMirror plus a jvault ADF serializer |
 | ~~**Streaming encryption**~~ **RESOLVED** | Does the chosen library stream with bounded heap and support the partial decryption our range reads need? | **Answered in implementation:** Tink's `subtle.AesGcmHkdfStreaming` takes a raw data key (composing with envelope encryption) and provides `newSeekableDecryptingChannel`, so ranged reads decrypt only the segments they touch. No decrypt-and-discard fallback needed (§9.3) |
 | ~~**Jira sandbox conformance**~~ **DONE for Cloud** | Does `POST /issue` accept `properties` at create time? What do createmeta responses look like? What rate-limit behaviour is observed? | **Answered against a live site:** create-time properties work, remote-link upsert on `globalId` confirmed, the deprecated aggregate `createmeta` is still alive, and structured `RateLimit` headers arrive on every response. See §0.3, §0.5, §0.6, §0.9. Still outstanding for Data Center. |
 | **Egress reality check** | Can the on-premises deployment reach `auth.atlassian.com` and `api.atlassian.com` through a forward proxy, or is it genuinely air-gapped? | Resolves the [D1+D2 conflict](decisions.md). Reading (b) — truly air-gapped — removes Jira Cloud entirely and makes the MVP **smaller** by roughly 4 weeks |
 | **On-prem key manager** | Vault Transit vs PKCS#11 against the actual hardware: does the chosen encryption library integrate cleanly, and what is `GenerateDataKey`/`Decrypt` latency under load? | Drives the KMS adapter choice and whether data-key caching is needed on the read path |
+
+### ADF editor spike — measured, 2026-09-13
+
+Both options installed and built for production with Vite.
+
+| | `@atlaskit/editor-core` 228 | TipTap + StarterKit |
+|---|---|---|
+| Licence | Apache-2.0 | MIT |
+| npm packages installed | **1164** (286 of them `@atlaskit/*`) | 59 |
+| `node_modules` | 758 MB | 19 MB |
+| Production build | **fails** on a default Vite setup | clean |
+| **JS shipped, gzipped** | **4.42 MB** | **0.16 MB** |
+| Largest chunk, gzipped | 1.66 MB | 168 kB |
+| React | pinned to **18 only** | 18 or 19 |
+| Node built-ins | `events`, `buffer` externalised — runtime breakage without polyfills | none |
+
+**Twenty-eight times more JavaScript, for the same job.** And the weight is not the editor: the
+bundle pulls in `embedded-confluence-bundle` (379 kB gzipped), `AgentProfileCard` and
+`issue-like-data-table-view` — Atlassian product surface this application will never show. Two
+further signals of a package meant for use inside Atlassian's own build rather than outside it:
+its shipped CSS contains a selector strict parsers reject (`…:after ::selection`), and it imports
+Node built-ins that only resolve under a polyfilled bundler.
+
+**Decision: TipTap + ProseMirror, with a jvault ADF serializer.** The cost is real and was already
+accepted in §2.4.4 — no Atlassian media nodes, no smart-link unfurling, no exotic panel semantics.
+The mapping itself is structural rather than a parsing problem, because ProseMirror's document
+model is a tree and so is ADF, and ADF publishes a JSON schema to validate the output against.
 
 Deliverable: three short written findings and any correction to this design.
 

@@ -190,7 +190,7 @@ Java backend and React frontend are fixed by you; the choices below are within t
 | **TanStack Query** | Server-state caching with the invalidation discipline the metadata cache needs. |
 | **React Hook Form + Zod** | The form schema is *built at runtime* from `createmeta`; Zod schemas can be constructed dynamically and reused for the field-level error mapping. |
 | **Atlassian Design System (`@atlaskit`)** | Users compare this UI to Jira directly. Matching components reduces the perceived parity gap for free. |
-| **ADF editor** | **Decision pending.** `@atlaskit/editor-core` is the only editor with native ADF fidelity, but it is heavy and its packaging/versioning outside Atlassian's own products needs validation. The fallback is TipTap/ProseMirror plus a jvault ADF serializer, which costs us fidelity on tables, panels, media and mentions. **TO VERIFY:** build a spike that renders and round-trips a corpus of real ADF documents through `@atlaskit/editor-core` in a standalone Vite app, and confirm the licence terms for external use. This is a Phase-0 spike because it can change the frontend plan materially. |
+| **TipTap + ProseMirror**, with a jvault ADF serializer | **Decided by measurement** (docs/15-implementation-plan.md). `@atlaskit/editor-core` ships 4.42 MB of gzipped JavaScript against TipTap's 0.16 MB, fails a default Vite production build, pins React to 18, and drags in Confluence embedding and Atlassian profile-card code this application will never show. ProseMirror's document model is a tree and so is ADF, so the serializer is a structural mapping rather than a parser. |
 
 ### 3.4.3 Platform
 

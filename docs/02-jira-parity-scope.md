@@ -109,8 +109,9 @@ alphabetically). This is a real divergence from Jira and must be communicated to
 rendered from Jira's Media API, emoji sets, `/`-commands, and collaborative editing. The ADF
 *format* is documented, but the editing experience is a Jira product surface.
 
-**Alternative.** Use an ADF-native editor (see [3. Architecture](03-architecture.md) on
-`@atlaskit/editor-core` vs. a ProseMirror/TipTap + ADF serializer) and accept:
+**Alternative.** TipTap/ProseMirror with a jvault ADF serializer — chosen by measurement, not
+preference: the Atlassian editor ships twenty-eight times more JavaScript for the same job
+(docs/15-implementation-plan.md). Accept in exchange:
 - Smart Links are entered and stored as ordinary links; Jira unfurls them on its side.
 - Inline media uploaded through jvault becomes an attachment plus a link, not a Jira media node,
   unless the part is Jira-placed and we upload through the attachment API first.
