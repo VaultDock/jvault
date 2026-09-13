@@ -1,0 +1,224 @@
+package dev.jvault.api;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.jvault.api.meta.MetadataController;
+import dev.jvault.api.security.Caller;
+import dev.jvault.api.security.CallerResolver;
+import dev.jvault.authz.Principal;
+import dev.jvault.domain.common.Classification;
+import dev.jvault.domain.placement.LinkPlacement;
+import dev.jvault.domain.placement.PartType;
+import dev.jvault.domain.placement.Placement;
+import dev.jvault.domain.placement.PlacementPolicy;
+import dev.jvault.domain.placement.PolicySelector;
+import dev.jvault.domain.placement.PolicySet;
+import dev.jvault.domain.placement.SurrogateSpec;
+import dev.jvault.jira.gateway.JiraMetadataGateway;
+import jakarta.servlet.http.HttpServletRequest;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+/**
+ * The form definition the SPA is built from.
+ *
+ * <p>The field list comes from Jira. The two things this endpoint adds are the reason it exists:
+ * where each field's value will be stored, and how faithfully jvault can render it.
+ *
+ * <p>The fixture uses the field types a real team-managed project actually returned, rather than
+ * invented ones — including the ranking and team fields that must not be editable.
+ */
+class MetadataControllerTest {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final String DEPLOYMENT = "jira-cloud-prod";
+
+    private final AtomicReference<Caller> caller = new AtomicReference<>();
+    private MockMvc mvc;
+
+    @BeforeEach
+    void setUp() {
+        caller.set(new Caller(Principal.user("alice"),
+                Set.of(Principal.group("sec-responders")), true));
+
+        var controller = new MetadataController(fakeJira(), policies(), callerResolver(), DEPLOYMENT);
+        mvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    @DisplayName("a field says where its value will be stored, before anyone types into it")
+    void fieldsCarryTheirPlacement() throws Exception {
+        String body = fields();
+
+        var description = field(body, "description");
+        assertThat(description.get("placement").asText()).isEqualTo("EXTERNAL");
+        assertThat(description.get("classification").asText()).isEqualTo("RESTRICTED");
+
+        // Finding out afterwards is the kind of surprise that makes people paste sensitive text
+        // somewhere else instead.
+        var summary = field(body, "summary");
+        assertThat(summary.get("placement").asText()).isEqualTo("JIRA");
+        assertThat(summary.get("classification").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("required flags and option lists come through from Jira")
+    void jiraMetadataIsPreserved() throws Exception {
+        String body = fields();
+
+        assertThat(field(body, "summary").get("required").asBoolean()).isTrue();
+        assertThat(field(body, "description").get("required").asBoolean()).isFalse();
+        assertThat(field(body, "priority").get("allowedValues")).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("fields jvault cannot faithfully render are marked read-only, not hidden")
+    void unsupportedTypesAreMarkedReadOnly() throws Exception {
+        String body = fields();
+
+        // Ranking and team fields are maintained by Jira's own boards; a form that let someone
+        // set them by hand would be lying about the effect. Showing them read-only is honest,
+        // and much better than a control that accepts input and drops it.
+        assertThat(field(body, "customfield_10019").get("supportLevel").asText())
+                .isEqualTo("READ_ONLY");
+        assertThat(field(body, "customfield_10001").get("supportLevel").asText())
+                .isEqualTo("READ_ONLY");
+        assertThat(field(body, "customfield_10015").get("supportLevel").asText())
+                .isEqualTo("REPRODUCED");
+    }
+
+    @Test
+    @DisplayName("an unknown custom type falls back to letting Jira validate it")
+    void unknownTypesDelegateValidation() throws Exception {
+        assertThat(field(fields(), "customfield_99999").get("supportLevel").asText())
+                .isEqualTo("DELEGATED_VALIDATION");
+    }
+
+    @Test
+    @DisplayName("a field with no set operation is read-only whatever its type")
+    void unsettableFieldsAreReadOnly() throws Exception {
+        // A plain text field, which jvault renders perfectly well, that Jira says cannot be set.
+        // The type is not the deciding factor here — Jira's own answer is.
+        assertThat(field(fields(), "customfield_10010").get("supportLevel").asText())
+                .isEqualTo("READ_ONLY");
+    }
+
+    @Test
+    @DisplayName("a deployment that reports no operations at all still yields a usable form")
+    void absentOperationsAreNotTreatedAsRefusal() throws Exception {
+        // Empty means Jira refused the field. Absent means it never spoke. Reading silence as
+        // refusal would render every control on the form inert against such a deployment.
+        assertThat(field(fields(), "customfield_10011").get("supportLevel").asText())
+                .isEqualTo("REPRODUCED");
+    }
+
+    @Test
+    @DisplayName("a truncated option list says so rather than pretending to be complete")
+    void largeOptionListsAreFlagged() throws Exception {
+        assertThat(field(fields(), "customfield_88888").get("hasMoreOptions").asBoolean()).isTrue();
+    }
+
+    @Test
+    @DisplayName("an anonymous caller gets 401")
+    void anonymousIsRefused() throws Exception {
+        caller.set(null);
+
+        mvc.perform(get("/api/v1/meta/projects")).andExpect(status().isUnauthorized());
+    }
+
+    // --- fixtures ----------------------------------------------------------------
+
+    private String fields() throws Exception {
+        return mvc.perform(get("/api/v1/meta/projects/KAN/issuetypes/10004/fields"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    private static com.fasterxml.jackson.databind.JsonNode field(String body, String key)
+            throws Exception {
+        for (var node : JSON.readTree(body).path("fields")) {
+            if (key.equals(node.path("key").asText())) {
+                return node;
+            }
+        }
+        throw new AssertionError("no field " + key + " in the form definition");
+    }
+
+    private static PolicySet policies() {
+        return PolicySet.of(List.of(PlacementPolicy.builder()
+                .id("sec-description")
+                .selector(new PolicySelector(DEPLOYMENT, "KAN", null, PartType.DESCRIPTION, null))
+                .placement(Placement.EXTERNAL)
+                .classification(Classification.RESTRICTED)
+                .storageRoute("fs-local")
+                .keyRing("sec-restricted")
+                .encryptionRequired(true)
+                .surrogate(SurrogateSpec.placeholder("Stored in jvault: {{link}}"))
+                .linkPlacements(Set.of(LinkPlacement.REMOTE_LINK))
+                .build()));
+    }
+
+    /** Shaped after what a real team-managed project returned. */
+    private static JiraMetadataGateway fakeJira() {
+        return new JiraMetadataGateway() {
+            @Override
+            public List<Project> projects() {
+                return List.of(new Project("10000", "KAN", "My first Jira", "next-gen"));
+            }
+
+            @Override
+            public List<IssueType> issueTypes(String projectKey) {
+                return List.of(new IssueType("10004", "Task", false, null));
+            }
+
+            @Override
+            public List<FieldMeta> fields(String projectKey, String issueTypeId) {
+                return List.of(
+                        new FieldMeta("summary", "Summary", true, "string", null,
+                                List.of(), false, List.of("set")),
+                        new FieldMeta("description", "Description", false, "string", null,
+                                List.of(), false, List.of("set")),
+                        new FieldMeta("priority", "Priority", false, "priority", null,
+                                List.of(new AllowedValue("1", "Highest"),
+                                        new AllowedValue("2", "High")), false, List.of("set")),
+                        new FieldMeta("customfield_10015", "Start date", false, "date",
+                                "datepicker", List.of(), false, List.of("set")),
+                        new FieldMeta("customfield_10019", "Rank", false, "any",
+                                "gh-lexo-rank", List.of(), false, List.of("set")),
+                        new FieldMeta("customfield_10001", "Team", false, "any",
+                                "atlassian-team", List.of(), false, List.of("set")),
+                        new FieldMeta("customfield_10000", "Development", false, "any",
+                                "devsummarycf", List.of(), false, List.of()),
+                        new FieldMeta("customfield_10010", "Request Type", false, "string",
+                                "textfield", List.of(), false, List.of()),
+                        new FieldMeta("customfield_10011", "Legacy field", false, "string",
+                                "textfield", List.of(), false, null),
+                        new FieldMeta("customfield_99999", "Something new", false, "string",
+                                "some-app-field", List.of(), false, List.of("set")),
+                        new FieldMeta("customfield_88888", "Big select", false, "option",
+                                "select", List.of(new AllowedValue("1", "one")), true,
+                                List.of("set")));
+            }
+        };
+    }
+
+    private CallerResolver callerResolver() {
+        return new CallerResolver() {
+            @Override
+            public Optional<Caller> resolve(HttpServletRequest request) {
+                return Optional.ofNullable(caller.get());
+            }
+        };
+    }
+}
