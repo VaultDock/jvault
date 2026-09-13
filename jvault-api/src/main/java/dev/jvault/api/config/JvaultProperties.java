@@ -20,6 +20,7 @@ public record JvaultProperties(String tenant,
                                Crypto crypto,
                                List<Policy> policies,
                                Kafka kafka,
+                               Oauth oauth,
                                Dev dev) {
 
     public JvaultProperties {
@@ -30,6 +31,7 @@ public record JvaultProperties(String tenant,
         crypto = crypto == null ? new Crypto(null) : crypto;
         policies = policies == null ? List.of() : List.copyOf(policies);
         kafka = kafka == null ? new Kafka(false, null, null, null, null) : kafka;
+        oauth = oauth == null ? new Oauth(false, null, null, null, null, false) : oauth;
         dev = dev == null ? new Dev(false, null, null) : dev;
     }
 
@@ -127,6 +129,31 @@ public record JvaultProperties(String tenant,
         public Kafka {
             deadLetterSuffix = deadLetterSuffix == null ? ".dlq" : deadLetterSuffix;
             quarantineKeyRing = quarantineKeyRing == null ? "sec-restricted" : quarantineKeyRing;
+        }
+    }
+
+    /**
+     * Signing in with Atlassian.
+     *
+     * @param enabled       off unless configured. Without it the application falls back to the
+     *                      development header resolver, which has to be asked for separately
+     * @param clientId      identifies jvault to Atlassian. Public information; it grants nothing
+     * @param clientSecret  a confidential credential. From the environment or a secret manager,
+     *                      never from a file that gets committed
+     * @param redirectUri   must match what is registered in the Atlassian developer console
+     *                      exactly, including the scheme and any trailing path
+     * @param secureCookies whether the session cookie is marked Secure. False only for plain
+     *                      http on localhost; true everywhere a browser talks to this over TLS
+     */
+    public record Oauth(boolean enabled,
+                        String clientId,
+                        String clientSecret,
+                        String redirectUri,
+                        String appBaseUrl,
+                        boolean secureCookies) {
+
+        public Oauth {
+            appBaseUrl = appBaseUrl == null ? "http://localhost:5173" : appBaseUrl;
         }
     }
 

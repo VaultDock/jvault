@@ -1,11 +1,13 @@
 package dev.jvault.api.config;
 
+import dev.jvault.api.auth.JiraUserAccessChecker;
 import dev.jvault.api.content.ContentAccessController;
 import dev.jvault.api.idempotency.IdempotencyService;
 import dev.jvault.api.idempotency.InMemoryIdempotencyStore;
 import dev.jvault.api.security.Caller;
 import dev.jvault.api.security.CallerResolver;
 import dev.jvault.api.security.HeaderCallerResolver;
+import dev.jvault.api.security.SessionCallerResolver;
 import dev.jvault.authz.ContentAuthorizationService;
 import dev.jvault.authz.Grant;
 import dev.jvault.authz.GrantService;
@@ -13,6 +15,7 @@ import dev.jvault.authz.Permission;
 import dev.jvault.authz.Principal;
 import dev.jvault.authz.Scope;
 import dev.jvault.authz.SpacePermissionMode;
+import dev.jvault.authz.session.SessionStore;
 import dev.jvault.content.CommentRepository;
 import dev.jvault.content.ContentMetadataRepository;
 import dev.jvault.content.ContentService;
@@ -30,6 +33,7 @@ import dev.jvault.domain.placement.PartType;
 import dev.jvault.domain.placement.Placement;
 import dev.jvault.domain.placement.PlacementPolicy;
 import dev.jvault.domain.placement.PolicySelector;
+import dev.jvault.domain.common.SensitiveValue;
 import dev.jvault.domain.placement.PolicySet;
 import dev.jvault.domain.placement.SurrogateSpec;
 import dev.jvault.jira.deployment.CloudDeployment;
@@ -39,12 +43,14 @@ import dev.jvault.jira.gateway.HttpJiraMetadataGateway;
 import dev.jvault.jira.gateway.JdkJiraHttpClient;
 import dev.jvault.jira.gateway.JiraHttpClient;
 import dev.jvault.jira.gateway.JiraMetadataGateway;
+import dev.jvault.jira.oauth.JiraOAuthClient;
 import dev.jvault.outbox.OutboxRepository;
 import dev.jvault.persistence.DialectDetector;
 import dev.jvault.persistence.JdbcAclRepository;
 import dev.jvault.persistence.JdbcCommentRepository;
 import dev.jvault.persistence.JdbcContentMetadataRepository;
 import dev.jvault.persistence.JdbcOutboxRepository;
+import dev.jvault.persistence.JdbcSessionStore;
 import dev.jvault.persistence.JdbcTicketRepository;
 import dev.jvault.persistence.SchemaMigrator;
 import dev.jvault.persistence.SqlDialect;
@@ -352,7 +358,18 @@ public class JvaultConfiguration {
      */
     @Bean
     public ContentAuthorizationService.JiraAccessChecker jiraAccessChecker(
-            JvaultProperties properties) {
+            JvaultProperties properties,
+            org.springframework.beans.factory.ObjectProvider<JiraOAuthClient> oauth,
+            SessionStore sessions,
+            JiraDeployment deployment,
+            Clock clock) {
+        JiraOAuthClient client = oauth.getIfAvailable();
+        if (client != null) {
+            // The real thing at last: Jira's own answer, asked with this person's token. Which
+            // is what signing in with Atlassian was the prerequisite for.
+            log.info("Content access is checked against Jira as the requesting user.");
+            return new JiraUserAccessChecker(sessions, client, deployment.id(), clock);
+        }
         if (!properties.dev().insecureAuth()) {
             throw new IllegalStateException(
                     "No Jira access checker is configured. Content authorization is the "
@@ -429,7 +446,35 @@ public class JvaultConfiguration {
     // --- identity ---------------------------------------------------------------
 
     @Bean
-    public CallerResolver callerResolver(JvaultProperties properties) {
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            prefix = "jvault.oauth", name = "enabled", havingValue = "true")
+    public JiraOAuthClient jiraOAuthClient(JvaultProperties properties) {
+        JvaultProperties.Oauth oauth = properties.oauth();
+        if (oauth.clientId() == null || oauth.clientSecret() == null
+                || oauth.redirectUri() == null) {
+            throw new IllegalStateException(
+                    "jvault.oauth.enabled is true but client-id, client-secret or redirect-uri "
+                            + "is missing. The redirect URI must match what is registered in the "
+                            + "Atlassian developer console exactly.");
+        }
+        return new JiraOAuthClient(oauth.clientId(),
+                SensitiveValue.of(oauth.clientSecret(), "jira.oauth.clientSecret"),
+                oauth.redirectUri());
+    }
+
+    @Bean
+    public SessionStore sessionStore(DataSource dataSource, SensitiveTextCipher cipher,
+                                     JvaultProperties properties, SchemaMigrator migrated) {
+        return new JdbcSessionStore(dataSource, cipher, properties.crypto().keyRings().get(0));
+    }
+
+    @Bean
+    public CallerResolver callerResolver(JvaultProperties properties, SessionStore sessions,
+                                         JiraDeployment deployment, Clock clock) {
+        if (properties.oauth().enabled()) {
+            log.info("Signing in with Atlassian. Identities are Atlassian account ids.");
+            return new SessionCallerResolver(sessions, deployment.id(), clock);
+        }
         if (!properties.dev().insecureAuth()) {
             throw new IllegalStateException(
                     "No authentication is configured. Set jvault.dev.insecure-auth=true to run "

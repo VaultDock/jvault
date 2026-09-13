@@ -53,6 +53,19 @@ jvault:
       surrogate: "=== SECURED ===\nDocument held in jvault: {{ticketLink}}"
       links: [REMOTE_LINK]
 
+  # Signing in with Atlassian. Create an OAuth 2.0 (3LO) app at developer.atlassian.com, add the
+  # Jira API with the read:jira-work, read:jira-user and offline_access scopes, and register the
+  # callback below as the redirect URL. The secret comes from the environment; a secret in a file
+  # is a secret in a commit.
+  oauth:
+    enabled: ${JVAULT_OAUTH_ENABLED:false}
+    client-id: ${JVAULT_OAUTH_CLIENTID:}
+    client-secret: ${JVAULT_OAUTH_CLIENTSECRET:}
+    redirect-uri: http://localhost:8080/api/v1/auth/callback
+    app-base-url: http://localhost:5173
+    # Plain http on localhost only. Anywhere a browser reaches this over TLS, this is true.
+    secure-cookies: false
+
   dev:
     # Identity from a request header. Named so that nobody enables it by accident, and the
     # application says so in its startup log every time.

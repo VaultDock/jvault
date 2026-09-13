@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api } from './api/client';
-import type { FormDefinition, Identity, IssueType, Project } from './api/types';
+import type { AuthStatus, FormDefinition, Identity, IssueType, Project } from './api/types';
 import { CreateIssueForm } from './components/CreateIssueForm';
+import { SignIn } from './components/SignIn';
 import { TicketView } from './components/TicketView';
 import { AlertIcon, EmptyIcon } from './components/icons';
 import { LANGUAGES, TranslationProvider, pickLanguage, useT, type Language } from './i18n';
@@ -14,24 +15,41 @@ const DEPLOYMENT_ID = import.meta.env['VITE_DEPLOYMENT_ID'] ?? 'jira-cloud-dev';
  */
 export function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    // Who is signed in decides whether anything else is worth asking for.
     api
-      .me()
-      .then(setIdentity)
-      // Not fatal. An unreachable API is reported by the page itself; falling back to the
-      // browser's language is better than showing nothing while deciding what to call it.
-      .catch(() => setIdentity(null))
+      .authStatus()
+      .then(async (status) => {
+        setAuth(status);
+        if (status.authenticated) {
+          // Not fatal if this fails: an unreachable API is reported by the page itself, and
+          // falling back to the browser's language beats showing nothing while deciding what to
+          // call things.
+          await api.me().then(setIdentity).catch(() => setIdentity(null));
+        }
+      })
+      .catch(() => setAuth(null))
       .finally(() => setReady(true));
   }, []);
 
   if (!ready) {
     return null;
   }
+
+  if (auth && !auth.authenticated && auth.loginUrl) {
+    return (
+      <TranslationProvider jiraLocale={null}>
+        <SignIn loginUrl={auth.loginUrl} reason={signInReason()} />
+      </TranslationProvider>
+    );
+  }
+
   return (
     <TranslationProvider jiraLocale={identity?.jiraLocale ?? null}>
-      <Chrome connection={identity ? 'live' : 'down'}>
+      <Chrome connection={identity ? 'live' : 'down'} auth={auth}>
         {ticketRefInPath() ? (
           <TicketView ticketRef={ticketRefInPath()!} />
         ) : (
@@ -49,6 +67,11 @@ export function App() {
  * navigation to intercept. There are none of those here, and the whole of it is one regular
  * expression.
  */
+/** The callback puts the reason on the query string when sign-in did not finish. */
+function signInReason(): string | null {
+  return new URLSearchParams(window.location.search).get('signin');
+}
+
 function ticketRefInPath(): string | null {
   const match = /^\/t\/([A-Za-z0-9-]{1,64})\/?$/.exec(window.location.pathname);
   return match ? match[1]! : null;
@@ -194,9 +217,11 @@ function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
  */
 function Chrome({
   connection,
+  auth,
   children,
 }: {
   connection: 'live' | 'down';
+  auth: AuthStatus | null;
   children: React.ReactNode;
 }) {
   const { t, language, setLanguage } = useT();
@@ -214,6 +239,26 @@ function Chrome({
           <span className={`dot dot--${connection === 'live' ? 'live' : 'down'}`} />
           {connection === 'live' ? t.connected : t.unreachable}
         </span>
+
+        {auth?.displayName ? (
+          <span className="topbar__who" title={auth.email ?? undefined}>
+            {auth.displayName}
+          </span>
+        ) : null}
+
+        {auth?.method === 'ATLASSIAN' ? (
+          <button
+            type="button"
+            className="topbar__signout"
+            onClick={() => {
+              // Reloaded rather than routed: ending the session invalidates everything the page
+              // is holding, and the sign-in screen is what should come next.
+              api.signOut().finally(() => window.location.assign('/'));
+            }}
+          >
+            {t.signOut}
+          </button>
+        ) : null}
 
         <label className="topbar__lang" title={t.languageNote}>
           <span className="visually-hidden">{t.language}</span>

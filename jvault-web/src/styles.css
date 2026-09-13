@@ -164,6 +164,72 @@ body {
   background-color: var(--surface-sunken);
 }
 
+.topbar__who {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar__signout {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+}
+
+.topbar__signout:hover {
+  border-color: var(--border);
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.signin {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 4rem);
+}
+
+.signin__card {
+  max-width: 26rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.signin__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 1rem;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--vault), var(--accent));
+  color: #fff;
+  font-weight: 700;
+}
+
+.signin__card h1 {
+  margin: 0 0 0.4rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.signin__button {
+  display: inline-block;
+  margin-top: 0.5rem;
+  text-decoration: none;
+}
+
+.signin__note {
+  margin: 1.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

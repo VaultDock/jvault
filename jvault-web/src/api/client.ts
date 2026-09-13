@@ -1,4 +1,5 @@
 import type {
+  AuthStatus,
   CreateTicketRequest,
   FormDefinition,
   Identity,
@@ -61,6 +62,10 @@ async function problemFrom(response: Response): Promise<Problem> {
 }
 
 export const api = {
+  authStatus: () => request<AuthStatus>('/api/v1/auth/status'),
+
+  signOut: () => request<void>('/api/v1/auth/logout', { method: 'POST' }),
+
   me: () => request<Identity>('/api/v1/meta/me'),
 
   /** The content, rendered for reading. Requires VIEW; taking a copy is a separate grant. */
