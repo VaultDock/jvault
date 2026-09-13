@@ -2,15 +2,23 @@ import { useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { FormDefinition, FormField, TicketResponse } from '../api/types';
 import { useT } from '../i18n';
+import { AttachmentField, type PendingFile } from './AttachmentField';
 import { FieldControl } from './FieldControl';
 import { AlertIcon, CheckIcon, VaultIcon } from './icons';
 
-/** Answered by the context bar above the form, and carried in the request body. */
-const DECIDED_ABOVE = new Set(['project', 'issuetype']);
+/**
+ * Not rendered among the ordinary fields: project and issue type are answered by the context bar
+ * above, and attachments have a control of their own.
+ */
+const DECIDED_ABOVE = new Set(['project', 'issuetype', 'attachment']);
+
+/** A file above this is refused by the server too; checking here only saves the round trip. */
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 type Status =
   | { kind: 'editing' }
   | { kind: 'submitting' }
+  | { kind: 'uploading' }
   | { kind: 'created'; ticket: TicketResponse }
   | { kind: 'failed'; message: string };
 
@@ -25,6 +33,7 @@ export function CreateIssueForm({
   const [values, setValues] = useState<Record<string, string>>({});
   const [fieldErrors, setFieldErrors] = useState<Map<string, string>>(new Map());
   const [status, setStatus] = useState<Status>({ kind: 'editing' });
+  const [files, setFiles] = useState<PendingFile[]>([]);
 
   // One key per attempt, reused if the attempt is retried. A user pressing Create twice on
   // purpose means it; a browser retrying a dropped connection does not, and only one of those
@@ -41,10 +50,18 @@ export function CreateIssueForm({
     () => shown.filter((field) => field.supportLevel !== 'READ_ONLY'),
     [shown],
   );
+  // Attachments are described by Jira's own `attachment` field, which the form renders
+  // read-only. Its placement is what decides whether documents go to the vault or to Jira.
+  const attachmentField = useMemo(
+    () => definition.fields.find((field) => field.key === 'attachment'),
+    [definition],
+  );
   const external = useMemo(
     () => shown.filter((field) => field.placement !== 'JIRA'),
     [shown],
   );
+  const vaultedCount =
+    external.length + (attachmentField && attachmentField.placement !== 'JIRA' ? 1 : 0);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -61,6 +78,13 @@ export function CreateIssueForm({
         },
         attempt,
       );
+      // The ticket exists now, so the attachments have something to belong to. A file that
+      // fails here does not undo the ticket: reporting both outcomes is more use than pretending
+      // the whole thing failed.
+      if (files.length > 0) {
+        setStatus({ kind: 'uploading' });
+        await uploadAll(ticket.ticketRef);
+      }
       setStatus({ kind: 'created', ticket });
     } catch (error) {
       if (error instanceof ApiError) {
@@ -83,12 +107,41 @@ export function CreateIssueForm({
     }
   }
 
+  async function uploadAll(ticketRef: string) {
+    const queue = files.filter((pending) => pending.status !== 'done');
+
+    for (const pending of queue) {
+      if (pending.file.size > MAX_UPLOAD_BYTES) {
+        continue;
+      }
+      mark(pending.id, { status: 'uploading' });
+      try {
+        await api.uploadAttachment(ticketRef, pending.file);
+        mark(pending.id, { status: 'done' });
+      } catch (error) {
+        mark(pending.id, {
+          status: 'failed',
+          error: error instanceof ApiError ? error.message : t.uploadFailed,
+        });
+      }
+    }
+  }
+
+  function mark(id: string, change: Partial<PendingFile>) {
+    setFiles((current) =>
+      current.map((pending) => (pending.id === id ? { ...pending, ...change } : pending)),
+    );
+  }
+
   if (status.kind === 'created') {
     return (
       <CreatedTicket
         ticket={status.ticket}
+        files={files}
+        onRetryUploads={() => uploadAll(status.ticket.ticketRef)}
         onReset={() => {
           setValues({});
+          setFiles([]);
           setAttempt(crypto.randomUUID());
           setStatus({ kind: 'editing' });
         }}
@@ -99,12 +152,12 @@ export function CreateIssueForm({
   return (
     <form onSubmit={submit} noValidate>
       <div className="form-body">
-        {external.length > 0 ? (
+        {vaultedCount > 0 ? (
           <p className="notice notice--vault">
             <VaultIcon />
             <span>
               <strong>
-                {external.length === 1 ? t.vaultNoticeOne : t.vaultNoticeMany(external.length)}
+                {vaultedCount === 1 ? t.vaultNoticeOne : t.vaultNoticeMany(vaultedCount)}
               </strong>{' '}
               {t.vaultNoticeTail}
             </span>
@@ -117,6 +170,15 @@ export function CreateIssueForm({
             <span>{status.message}</span>
           </p>
         ) : null}
+
+        <AttachmentField
+          placement={attachmentField?.placement ?? 'EXTERNAL'}
+          classification={attachmentField?.classification ?? null}
+          files={files}
+          onChange={setFiles}
+          disabled={status.kind === 'submitting' || status.kind === 'uploading'}
+          maxBytes={MAX_UPLOAD_BYTES}
+        />
 
         {shown.map((field) => (
           <FieldControl
@@ -131,11 +193,19 @@ export function CreateIssueForm({
       </div>
 
       <div className="actions">
-        <button type="submit" className="btn-primary" disabled={status.kind === 'submitting'}>
-          {status.kind === 'submitting' ? t.creating : t.create}
+        <button
+          type="submit"
+          className="btn-primary"
+          disabled={status.kind === 'submitting' || status.kind === 'uploading'}
+        >
+          {status.kind === 'submitting'
+            ? t.creating
+            : status.kind === 'uploading'
+              ? t.uploading
+              : t.create}
         </button>
         <span className="actions__note">
-          {t.fieldCount(shown.length, external.length)}
+          {t.fieldCount(shown.length, vaultedCount)}
         </span>
       </div>
     </form>
@@ -154,8 +224,19 @@ function filled(fields: FormField[], values: Record<string, string>): Record<str
   return result;
 }
 
-function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: () => void }) {
+function CreatedTicket({
+  ticket,
+  files,
+  onRetryUploads,
+  onReset,
+}: {
+  ticket: TicketResponse;
+  files: PendingFile[];
+  onRetryUploads: () => void;
+  onReset: () => void;
+}) {
   const { t } = useT();
+  const failed = files.filter((pending) => pending.status === 'failed');
   return (
     <div className="result">
       <div className="result__head">
@@ -177,6 +258,35 @@ function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: (
         <dt>{t.jiraIssue}</dt>
         <dd>{ticket.issueKey ?? t.beingCreated}</dd>
       </dl>
+
+      {failed.length > 0 ? (
+        <p className="notice notice--error" role="alert">
+          <AlertIcon />
+          <span>
+            {t.someFilesFailed}{' '}
+            <button type="button" className="linklike" onClick={onRetryUploads}>
+              {t.retryUploads}
+            </button>
+          </span>
+        </p>
+      ) : null}
+
+      {files.some((pending) => pending.status === 'done') ? (
+        <>
+          <h3>{t.attachments}</h3>
+          <ul className="parts">
+            {files
+              .filter((pending) => pending.status === 'done')
+              .map((pending) => (
+                <li key={pending.id}>
+                  <VaultIcon />
+                  <span className="parts__name">{pending.file.name}</span>
+                  <span className="chip chip--class">{t.uploaded}</span>
+                </li>
+              ))}
+          </ul>
+        </>
+      ) : null}
 
       {ticket.parts.length > 0 ? (
         <>

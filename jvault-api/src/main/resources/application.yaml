@@ -14,8 +14,12 @@ spring:
       enabled: true
   servlet:
     multipart:
-      max-file-size: 1GB
-      max-request-size: 1GB
+      # Slightly above jvault.storage.max-upload-bytes on purpose. This limit is enforced by the
+      # container, which answers with its own error before any jvault code runs; leaving a little
+      # headroom means an oversized file gets the endpoint's own message saying what the limit is,
+      # rather than a bare 500 from Tomcat.
+      max-file-size: 110MB
+      max-request-size: 120MB
 
 server:
   error:

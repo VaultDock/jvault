@@ -613,6 +613,103 @@ button:focus-visible {
   padding-left: 1.3rem;
 }
 
+/* --- attachments --------------------------------------------------------- */
+
+.dropzone {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--vault-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.dropzone.is-dragging {
+  border-color: var(--vault);
+  background: var(--vault-soft);
+}
+
+.dropzone.is-disabled {
+  opacity: 0.6;
+}
+
+.dropzone input[type='file'] {
+  display: none;
+}
+
+.dropzone__hint {
+  color: var(--text-muted);
+  font-size: 0.87rem;
+}
+
+.filelist {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.filelist__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.88rem;
+}
+
+.filelist__item + .filelist__item {
+  border-top: 1px solid var(--border);
+}
+
+.filelist__item > svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--vault);
+}
+
+.filelist__name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filelist__size {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+}
+
+.filelist__status {
+  margin-left: auto;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.filelist__item.is-done .filelist__status {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.filelist__item.is-failed .filelist__status {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.linklike {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 /* --- actions ------------------------------------------------------------- */
 
 .actions {

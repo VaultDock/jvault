@@ -17,6 +17,7 @@ import dev.jvault.content.CommentRepository;
 import dev.jvault.content.ContentMetadataRepository;
 import dev.jvault.content.ContentService;
 import dev.jvault.content.LinkFactory;
+import dev.jvault.content.TicketAmendmentService;
 import dev.jvault.content.TicketCreationService;
 import dev.jvault.content.TicketRepository;
 import dev.jvault.crypto.envelope.ContentCipher;
@@ -270,6 +271,18 @@ public class JvaultConfiguration {
         log.warn("Idempotency keys are held in memory. A retry that reaches a different instance "
                 + "will not be recognised; run one instance until this is on the database.");
         return new IdempotencyService(new InMemoryIdempotencyStore(), clock);
+    }
+
+    @Bean
+    public TicketAmendmentService ticketAmendmentService(PolicySet policies,
+                                                         ContentService content,
+                                                         TicketRepository tickets,
+                                                         CommentRepository comments,
+                                                         OutboxRepository outbox,
+                                                         LinkFactory links,
+                                                         Clock clock) {
+        return new TicketAmendmentService(policies, content, tickets, comments, outbox, links,
+                ContentService.IdGenerator.random(), clock);
     }
 
     // --- Jira -------------------------------------------------------------------

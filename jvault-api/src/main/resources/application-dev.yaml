@@ -37,6 +37,19 @@ jvault:
       surrogate: "Held in jvault: {{link}}"
       links: [REMOTE_LINK]
 
+    # Documents never go to Jira in this profile. Attachments are the reason most of the storage
+    # machinery exists, so a development setup that left them in Jira would exercise none of it.
+    - id: dev-attachments-external
+      deployment: jira-cloud-dev
+      project: KAN
+      part-type: ATTACHMENT
+      placement: EXTERNAL
+      classification: CONFIDENTIAL
+      storage-route: fs-local
+      key-ring: sec-restricted
+      surrogate: "Document held in jvault: {{link}}"
+      links: [REMOTE_LINK]
+
   dev:
     # Identity from a request header. Named so that nobody enables it by accident, and the
     # application says so in its startup log every time.

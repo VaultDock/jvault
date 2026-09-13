@@ -6,6 +6,7 @@ import type {
   Problem,
   Project,
   TicketResponse,
+  UploadedAttachment,
   UserRef,
 } from './types';
 
@@ -84,6 +85,21 @@ export const api = {
    * network failure the browser retries cannot produce two issues. A fresh submission is a new
    * key, because a user pressing Create twice on purpose means it.
    */
+  /**
+   * Uploads one document to a ticket that already exists.
+   *
+   * No Content-Type header: the browser sets it, and it must include the multipart boundary it
+   * generated. Setting it by hand produces a body the server cannot parse.
+   */
+  uploadAttachment: (ticketRef: string, file: File) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request<UploadedAttachment>(
+      `/api/v1/tickets/${encodeURIComponent(ticketRef)}/attachments`,
+      { method: 'POST', body },
+    );
+  },
+
   createTicket: (body: CreateTicketRequest, idempotencyKey: string) =>
     request<TicketResponse>('/api/v1/tickets', {
       method: 'POST',

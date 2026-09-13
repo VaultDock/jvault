@@ -198,6 +198,10 @@ public class MetadataController {
             case "summary" -> PartType.SUMMARY;
             case "description" -> PartType.DESCRIPTION;
             case "environment" -> PartType.BODY;
+            // Not a custom field, and the difference is load-bearing: it is how the form learns
+            // whether uploaded documents are going to the vault or to Jira, which decides both
+            // what the control says and whether it works at all.
+            case "attachment" -> PartType.ATTACHMENT;
             default -> PartType.CUSTOM_FIELD;
         };
     }

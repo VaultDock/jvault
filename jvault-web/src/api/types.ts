@@ -102,3 +102,13 @@ export interface Identity {
   jiraLocale: string | null;
   deployment: string;
 }
+
+export interface UploadedAttachment {
+  contentRef: string;
+  fileName: string;
+  sizeBytes: number;
+  mediaType: string;
+  classification: string;
+  jiraSurrogate: string;
+  link: string;
+}

@@ -66,9 +66,79 @@ describe('CreateIssueForm', () => {
     render(<CreateIssueForm definition={definition} deploymentId="d1" />);
 
     // The whole reason this form exists rather than Jira's own. A user who learns after
-    // submitting has already decided how much to type.
-    expect(screen.getByText('Stored in jvault')).toBeDefined();
+    // submitting has already decided how much to type. Two chips: the Notes field and the
+    // attachment control, which is externally placed by default.
+    expect(screen.getAllByText('Stored in jvault')).toHaveLength(2);
     expect(screen.getByText(/1 field on this form is|One field on this form is/)).toBeDefined();
+  });
+
+  it('says attachments go to Jira when that is what policy says, instead of offering an upload', () => {
+    render(
+      <CreateIssueForm
+        definition={{
+          ...definition,
+          fields: [...definition.fields, field({ key: 'attachment', name: 'Attachment' })],
+        }}
+        deploymentId="d1"
+      />,
+    );
+
+    // The API answers 501 for this case rather than quietly keeping a copy policy never asked
+    // for. Saying so before someone picks a file beats saying so after.
+    expect(screen.getByText(/attachments go to Jira/)).toBeDefined();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose files' }).disabled).toBe(
+      true,
+    );
+  });
+
+  it('uploads chosen files once the ticket exists, not before', async () => {
+    const create = vi.spyOn(api, 'createTicket').mockResolvedValue(created);
+    const upload = vi.spyOn(api, 'uploadAttachment').mockResolvedValue({
+      contentRef: 'ct-9',
+      fileName: 'q3.pdf',
+      sizeBytes: 4,
+      mediaType: 'application/pdf',
+      classification: 'RESTRICTED',
+      jiraSurrogate: 'Held in jvault',
+      link: '/c/ct-9',
+    });
+
+    render(<CreateIssueForm definition={definition} deploymentId="d1" />);
+    await userEvent.type(screen.getByLabelText(/Summary/), 'With a document');
+    await userEvent.upload(
+      screen.getByTestId('attachment-input'),
+      new File(['abcd'], 'q3.pdf', { type: 'application/pdf' }),
+    );
+
+    // Nothing is sent while the form is being filled in: a file uploaded before Create is a file
+    // jvault has to explain the existence of if Create is never pressed.
+    expect(upload).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => expect(upload).toHaveBeenCalledOnce());
+    expect(create).toHaveBeenCalledOnce();
+    expect(upload.mock.calls[0]![0]).toBe('tkt-1');
+    expect(await screen.findByText('uploaded')).toBeDefined();
+  });
+
+  it('a ticket that was created survives a file that was not', async () => {
+    vi.spyOn(api, 'createTicket').mockResolvedValue(created);
+    vi.spyOn(api, 'uploadAttachment').mockRejectedValue(new Error('disk full'));
+
+    render(<CreateIssueForm definition={definition} deploymentId="d1" />);
+    await userEvent.type(screen.getByLabelText(/Summary/), 'With a document');
+    await userEvent.upload(
+      screen.getByTestId('attachment-input'),
+      new File(['abcd'], 'q3.pdf', { type: 'application/pdf' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    // Reporting both outcomes is more use than pretending the whole thing failed — the ticket
+    // is real and retrying the upload is the only thing left to do.
+    expect(await screen.findByText('tkt-1')).toBeDefined();
+    expect(screen.getByText(/some files did not attach/)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Retry/ })).toBeDefined();
   });
 
   it('disables a field Jira maintains rather than dropping what is typed into it', () => {

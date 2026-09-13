@@ -25,7 +25,7 @@ public record JvaultProperties(String tenant,
         tenant = tenant == null ? "default" : tenant;
         baseUrl = baseUrl == null ? "http://localhost:8080" : baseUrl;
         jira = jira == null ? new Jira(null, null, null, null, null) : jira;
-        storage = storage == null ? new Storage(null, null) : storage;
+        storage = storage == null ? new Storage(null, null, null) : storage;
         crypto = crypto == null ? new Crypto(null) : crypto;
         policies = policies == null ? List.of() : List.copyOf(policies);
         dev = dev == null ? new Dev(false, null, null) : dev;
@@ -45,11 +45,19 @@ public record JvaultProperties(String tenant,
                        String connectUrl) {
     }
 
-    /** @param root where the filesystem backend writes. Never inside the working directory. */
-    public record Storage(String route, Path root) {
+    /**
+     * @param root           where the filesystem backend writes. Never inside the working
+     *                       directory
+     * @param maxUploadBytes the largest attachment accepted. A number somebody chose: the
+     *                       default is Jira Cloud's own per-file limit, so a file jvault accepts
+     *                       is one Jira would have accepted too, and a policy change later
+     *                       cannot strand a file that is too big to mirror
+     */
+    public record Storage(String route, Path root, Long maxUploadBytes) {
 
         public Storage {
             route = route == null ? "fs-local" : route;
+            maxUploadBytes = maxUploadBytes == null ? 100L * 1024 * 1024 : maxUploadBytes;
         }
     }
 
