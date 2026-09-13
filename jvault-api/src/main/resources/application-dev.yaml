@@ -1,0 +1,45 @@
+# A single-machine development profile. Every value here is either a convenience that a real
+# deployment must replace, or a default that happens to be right everywhere.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/jvault
+    username: jvault
+    password: jvault
+
+jvault:
+  tenant: dev
+  base-url: http://localhost:8080
+  jira:
+    deployment-id: jira-cloud-dev
+    # Supplied from the environment: JVAULT_JIRA_BASEURL, JVAULT_JIRA_EMAIL,
+    # JVAULT_JIRA_APITOKEN. A token in a file is a token in a commit.
+    base-url: ${JVAULT_JIRA_BASEURL:}
+    email: ${JVAULT_JIRA_EMAIL:}
+    api-token: ${JVAULT_JIRA_APITOKEN:}
+  storage:
+    route: fs-local
+    root: /tmp/jvault-dev/content
+  crypto:
+    key-rings:
+      - default
+      - sec-restricted
+  # One rule: descriptions in KAN leave Jira. Everything else this profile touches stays where
+  # it was, which is what makes the difference visible when a ticket is created.
+  policies:
+    - id: dev-description-external
+      deployment: jira-cloud-dev
+      project: KAN
+      part-type: DESCRIPTION
+      placement: EXTERNAL
+      classification: RESTRICTED
+      storage-route: fs-local
+      key-ring: sec-restricted
+      surrogate: "Held in jvault: {{link}}"
+      links: [REMOTE_LINK]
+
+  dev:
+    # Identity from a request header. Named so that nobody enables it by accident, and the
+    # application says so in its startup log every time.
+    insecure-auth: true
+    default-user: dev-user
+    bootstrap-project: KAN

@@ -1,6 +1,12 @@
 spring:
   application:
     name: jvault-api
+  flyway:
+    # SchemaMigrator runs the migrations, not Boot's auto-configuration. The scripts live in one
+    # directory per engine, and the engine is not known until the connection is open — Boot's
+    # default scan of classpath:db/migration finds all three at once and refuses, having found
+    # three different V1s.
+    enabled: false
   mvc:
     problemdetails:
       # RFC 9457 for framework-raised errors too, so a 405 and a validation failure have the same
