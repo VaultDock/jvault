@@ -16,6 +16,7 @@ function renderPicker(onChange = vi.fn()) {
       <IssuePicker
         id="field-parent"
         projectKey="KAN"
+        issueTypeId="10004"
         value=""
         disabled={false}
         required={false}
@@ -52,7 +53,9 @@ describe('IssuePicker', () => {
     await userEvent.click(screen.getByRole('combobox'));
     await userEvent.type(screen.getByRole('combobox'), 'payroll');
 
-    await waitFor(() => expect(search).toHaveBeenCalledWith('KAN', 'payroll'));
+    // The type travels with the query: a parent sits one level above it, and without that the
+    // server would offer candidates Jira refuses.
+    await waitFor(() => expect(search).toHaveBeenCalledWith('KAN', 'payroll', '10004'));
   });
 
   it('does not fire a request per keystroke', async () => {

@@ -74,8 +74,10 @@ public enum JiraFieldEncoding {
                 case "description", "environment" -> RICH_TEXT;
                 case "labels" -> STRING_ARRAY;
                 case "priority", "issuetype", "resolution", "security" -> ID_OBJECT;
-                // A parent, an epic link, a blocked-by: Jira names the issue, not its id.
-            case "project", "issuelink" -> KEY_OBJECT;
+                // Field keys, not schema names: "issuelink" belongs in the switch below and was
+                // briefly here, where nothing is called that — so `parent` matched neither table
+                // and was sent to Jira as a bare string.
+                case "project", "parent" -> KEY_OBJECT;
                 case "assignee", "reporter" -> ACCOUNT_OBJECT;
                 default -> null;
             };

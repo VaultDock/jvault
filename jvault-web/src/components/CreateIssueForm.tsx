@@ -185,6 +185,7 @@ export function CreateIssueForm({
             key={field.key}
             field={field}
             projectKey={definition.projectKey}
+            issueTypeId={definition.issueTypeId}
             value={values[field.key] ?? ''}
             error={fieldErrors.get(field.key)}
             onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}

@@ -70,7 +70,11 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
                     type.path("id").asText(null),
                     type.path("name").asText(null),
                     type.path("subtask").asBoolean(false),
-                    type.path("description").asText(null)));
+                    type.path("description").asText(null),
+                    // Absent on older deployments; a subtask is -1 and everything else 0, which
+                    // is the shape Jira had before epics were part of the hierarchy.
+                    type.path("hierarchyLevel").asInt(
+                            type.path("subtask").asBoolean(false) ? -1 : 0)));
         }
         return List.copyOf(types);
     }
@@ -125,11 +129,39 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
     }
 
     @Override
-    public List<IssueRef> searchIssues(String projectKey, String query) {
+    public List<IssueRef> searchIssues(String projectKey, String query, String childIssueTypeId) {
+        List<IssueType> types = issueTypes(projectKey);
+        String childId = childIssueTypeId == null ? "" : childIssueTypeId;
+
+        int childLevel = types.stream()
+                .filter(type -> childId.equals(type.id()))
+                .mapToInt(IssueType::hierarchyLevel)
+                .findFirst()
+                .orElse(0);
+
+        List<String> parentTypes = types.stream()
+                .filter(type -> type.hierarchyLevel() == childLevel + 1)
+                .map(IssueType::name)
+                .toList();
+
+        if (parentTypes.isEmpty()) {
+            // Nothing sits above this type, so nothing can be its parent. An empty list is the
+            // honest answer; a list of things Jira will refuse is not.
+            return List.of();
+        }
+        return search(projectKey, query, parentTypes);
+    }
+
+    private List<IssueRef> search(String projectKey, String query, List<String> parentTypes) {
         // Quoted and escaped: a project key comes from configuration, but the query is whatever
         // somebody typed, and a stray quote in a JQL string is a syntax error at best.
         var jql = new StringBuilder("project = \"").append(jqlEscape(projectKey))
-                .append("\" AND issuetype not in subtaskIssueTypes()");
+                .append("\" AND issuetype in (");
+        for (int i = 0; i < parentTypes.size(); i++) {
+            jql.append(i == 0 ? "" : ", ").append('"')
+                    .append(jqlEscape(parentTypes.get(i))).append('"');
+        }
+        jql.append(')');
 
         if (query != null && !query.isBlank()) {
             String term = jqlEscape(query.trim());

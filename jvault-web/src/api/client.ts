@@ -92,10 +92,17 @@ export const api = {
 
   projects: () => request<Project[]>('/api/v1/meta/projects'),
 
-  searchIssues: (projectKey: string, query: string) =>
+  /**
+   * Issues that could parent something of this type.
+   *
+   * The type is not optional in practice: a parent sits exactly one level above the child, so
+   * without it the server cannot tell an epic from a task and would offer candidates Jira
+   * refuses.
+   */
+  searchIssues: (projectKey: string, query: string, issueTypeId: string) =>
     request<IssueRef[]>(
       `/api/v1/meta/projects/${encodeURIComponent(projectKey)}/issues` +
-        `?query=${encodeURIComponent(query)}`,
+        `?query=${encodeURIComponent(query)}&issueType=${encodeURIComponent(issueTypeId)}`,
     ),
 
   searchUsers: (projectKey: string, query: string, assignable: boolean) =>

@@ -210,6 +210,18 @@ class MetadataControllerTest {
     }
 
     @Test
+    @DisplayName("a type nothing can parent offers no candidates rather than invalid ones")
+    void unparentableTypesOfferNothing() throws Exception {
+        String body = mvc.perform(get("/api/v1/meta/projects/KAN/issues?issueType=10001"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // Offering a list Jira will refuse is how every ticket with a parent failed: the picker
+        // showed tasks as candidate parents of tasks, and Jira rejects that combination.
+        assertThat(JSON.readTree(body)).isEmpty();
+    }
+
+    @Test
     @DisplayName("an anonymous caller gets 401")
     void anonymousIsRefused() throws Exception {
         caller.set(null);
@@ -272,13 +284,17 @@ class MetadataControllerTest {
             }
 
             @Override
-            public List<IssueRef> searchIssues(String projectKey, String query) {
-                return List.of(new IssueRef("KAN-1", "Migrate the payroll export", "Epic"));
+            public List<IssueRef> searchIssues(String projectKey, String query,
+                                               String childIssueTypeId) {
+                // An epic parents a task; nothing parents an epic.
+                return "10001".equals(childIssueTypeId)
+                        ? List.of()
+                        : List.of(new IssueRef("KAN-1", "Migrate the payroll export", "Epic"));
             }
 
             @Override
             public List<IssueType> issueTypes(String projectKey) {
-                return List.of(new IssueType("10004", "Task", false, null));
+                return List.of(new IssueType("10004", "Task", false, null, 0));
             }
 
             @Override

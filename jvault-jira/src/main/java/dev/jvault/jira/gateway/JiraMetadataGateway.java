@@ -38,14 +38,17 @@ public interface JiraMetadataGateway {
     List<UserRef> searchUsers(String projectKey, String query, boolean assignable);
 
     /**
-     * Issues in a project that could be a parent.
+     * Issues that could be the parent of something of this type.
      *
-     * <p>Subtasks are excluded because nothing parents a subtask. Beyond that this does not try
-     * to work out which types the hierarchy permits: that depends on a configuration jvault
-     * cannot read, so the list is offered best-effort and Jira validates the choice on submit
-     * (docs/02-jira-parity-scope.md 2.3).
+     * <p>A parent sits exactly one level up: an epic parents a task, a task parents a subtask,
+     * and nothing parents an epic. Offering anything else produces a create that Jira refuses
+     * with a field error, which is a poor way to find out — the earlier version offered every
+     * non-subtask and every ticket given a task as its parent failed.
+     *
+     * @param childIssueTypeId the type of the issue being created, whose level decides the
+     *                         answer. An empty list means this type takes no parent
      */
-    List<IssueRef> searchIssues(String projectKey, String query);
+    List<IssueRef> searchIssues(String projectKey, String query, String childIssueTypeId);
 
     /**
      * The account jvault is acting as.
@@ -82,7 +85,13 @@ public interface JiraMetadataGateway {
     record Project(String id, String key, String name, String style) {
     }
 
-    record IssueType(String id, String name, boolean subtask, String description) {
+    /**
+     * @param hierarchyLevel where this type sits: 1 for an epic, 0 for ordinary work, -1 for a
+     *                       subtask. It is what decides which issues may be a parent, and Jira
+     *                       refuses the combination rather than ignoring it
+     */
+    record IssueType(String id, String name, boolean subtask, String description,
+                     int hierarchyLevel) {
     }
 
     /**

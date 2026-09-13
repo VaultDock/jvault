@@ -15,12 +15,14 @@ import { UserPicker } from './UserPicker';
 export function FieldControl({
   field,
   projectKey,
+  issueTypeId,
   value,
   error,
   onChange,
 }: {
   field: FormField;
   projectKey: string;
+  issueTypeId: string;
   value: string;
   error?: string | undefined;
   onChange: (value: string) => void;
@@ -52,7 +54,7 @@ export function FieldControl({
         <SupportBadge field={field} />
       </div>
 
-      {renderControl(field, projectKey, id, value, editable, onChange, t)}
+      {renderControl(field, projectKey, issueTypeId, id, value, editable, onChange, t)}
 
       <FieldHint field={field} />
 
@@ -73,6 +75,7 @@ function splitValues(value: string): string[] {
 function renderControl(
   field: FormField,
   projectKey: string,
+  issueTypeId: string,
   id: string,
   value: string,
   editable: boolean,
@@ -154,6 +157,7 @@ function renderControl(
         <IssuePicker
           id={id}
           projectKey={projectKey}
+          issueTypeId={issueTypeId}
           value={value}
           disabled={!editable}
           required={field.required}

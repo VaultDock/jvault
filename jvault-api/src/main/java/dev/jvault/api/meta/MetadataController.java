@@ -105,9 +105,11 @@ public class MetadataController {
     @GetMapping("/projects/{projectKey}/issues")
     public ResponseEntity<?> issues(@PathVariable String projectKey,
                                     @RequestParam(defaultValue = "") String query,
+                                    @RequestParam(required = false) String issueType,
                                     HttpServletRequest request) {
+        // The type being created decides the answer: a parent sits exactly one level above it.
         return authenticated(request, caller ->
-                ResponseEntity.ok(metadata.searchIssues(projectKey, query)));
+                ResponseEntity.ok(metadata.searchIssues(projectKey, query, issueType)));
     }
 
     @GetMapping("/projects/{projectKey}/issuetypes")
