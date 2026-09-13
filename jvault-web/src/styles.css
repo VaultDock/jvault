@@ -1271,3 +1271,39 @@ button:focus-visible {
     flex-wrap: wrap;
   }
 }
+
+/* Taking a copy sits at the far end of the part's header, away from what it is a copy of. */
+.secured__take {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.secured__take .linklike {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.secured__take .linklike:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.secured__take .linklike svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.secured__refused {
+  font-size: 0.78rem;
+  color: var(--danger);
+}

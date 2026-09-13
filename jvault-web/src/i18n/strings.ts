@@ -81,6 +81,9 @@ export interface Strings {
   nothingSecured: string;
   tooLargeToShow: string;
   cannotPreview: (mediaType: string) => string;
+  download: string;
+  downloading: string;
+  downloadRefused: string;
   notInJira: string;
   jiraRejected: string;
   ticketView: string;
@@ -177,6 +180,9 @@ const en: Strings = {
   nothingSecured: 'Nothing on this ticket is held outside Jira.',
   tooLargeToShow: 'This is too large to show here.',
   cannotPreview: (mediaType) => `jvault cannot show ${mediaType} on a page.`,
+  download: 'Download a copy',
+  downloading: 'Preparing the copy…',
+  downloadRefused: 'You may read this here, but not take a copy of it.',
   notInJira: 'Not in Jira',
   jiraRejected: 'Jira refused this ticket. Open the ticket view to see what it holds.',
   ticketView: 'Ticket view',
@@ -273,6 +279,9 @@ const de: Strings = {
   nothingSecured: 'Zu diesem Vorgang wird nichts außerhalb von Jira aufbewahrt.',
   tooLargeToShow: 'Das ist zu groß, um es hier anzuzeigen.',
   cannotPreview: (mediaType) => `jvault kann ${mediaType} nicht auf einer Seite anzeigen.`,
+  download: 'Kopie herunterladen',
+  downloading: 'Kopie wird vorbereitet…',
+  downloadRefused: 'Sie dürfen dies hier lesen, aber keine Kopie mitnehmen.',
   notInJira: 'Nicht in Jira',
   jiraRejected: 'Jira hat diesen Vorgang abgelehnt. Öffnen Sie die Ticketansicht, um den Inhalt zu sehen.',
   ticketView: 'Ticketansicht',
@@ -369,6 +378,9 @@ const fr: Strings = {
   nothingSecured: 'Rien dans ce ticket n’est conservé hors de Jira.',
   tooLargeToShow: 'Trop volumineux pour être affiché ici.',
   cannotPreview: (mediaType) => `jvault ne peut pas afficher ${mediaType} sur une page.`,
+  download: 'Télécharger une copie',
+  downloading: 'Préparation de la copie…',
+  downloadRefused: 'Vous pouvez lire ceci ici, mais pas en emporter une copie.',
   notInJira: 'Pas dans Jira',
   jiraRejected: 'Jira a refusé ce ticket. Ouvrez la vue du ticket pour voir son contenu.',
   ticketView: 'Vue du ticket',
@@ -465,6 +477,9 @@ const es: Strings = {
   nothingSecured: 'Nada de esta incidencia se guarda fuera de Jira.',
   tooLargeToShow: 'Es demasiado grande para mostrarlo aquí.',
   cannotPreview: (mediaType) => `jvault no puede mostrar ${mediaType} en una página.`,
+  download: 'Descargar una copia',
+  downloading: 'Preparando la copia…',
+  downloadRefused: 'Puede leerlo aquí, pero no llevarse una copia.',
   notInJira: 'No está en Jira',
   jiraRejected: 'Jira rechazó esta incidencia. Abra la vista del ticket para ver su contenido.',
   ticketView: 'Vista del ticket',
@@ -561,6 +576,9 @@ const it: Strings = {
   nothingSecured: 'Nulla di questo ticket è conservato fuori da Jira.',
   tooLargeToShow: 'È troppo grande per essere mostrato qui.',
   cannotPreview: (mediaType) => `jvault non può mostrare ${mediaType} in una pagina.`,
+  download: 'Scarica una copia',
+  downloading: 'Preparazione della copia…',
+  downloadRefused: 'Puoi leggerlo qui, ma non portarne via una copia.',
   notInJira: 'Non in Jira',
   jiraRejected: 'Jira ha rifiutato questo ticket. Apri la vista del ticket per vederne il contenuto.',
   ticketView: 'Vista del ticket',
@@ -657,6 +675,9 @@ const nl: Strings = {
   nothingSecured: 'Niets van dit ticket wordt buiten Jira bewaard.',
   tooLargeToShow: 'Dit is te groot om hier te tonen.',
   cannotPreview: (mediaType) => `jvault kan ${mediaType} niet op een pagina tonen.`,
+  download: 'Een kopie downloaden',
+  downloading: 'De kopie wordt voorbereid…',
+  downloadRefused: 'U mag dit hier lezen, maar er geen kopie van meenemen.',
   notInJira: 'Niet in Jira',
   jiraRejected: 'Jira heeft dit ticket geweigerd. Open de ticketweergave om de inhoud te zien.',
   ticketView: 'Ticketweergave',
@@ -753,6 +774,9 @@ const pt: Strings = {
   nothingSecured: 'Nada neste ticket é guardado fora do Jira.',
   tooLargeToShow: 'É demasiado grande para mostrar aqui.',
   cannotPreview: (mediaType) => `O jvault não consegue mostrar ${mediaType} numa página.`,
+  download: 'Transferir uma cópia',
+  downloading: 'A preparar a cópia…',
+  downloadRefused: 'Pode ler isto aqui, mas não levar uma cópia.',
   notInJira: 'Não está no Jira',
   jiraRejected: 'O Jira recusou este ticket. Abra a vista do ticket para ver o conteúdo.',
   ticketView: 'Vista do ticket',
@@ -849,6 +873,9 @@ const lb: Strings = {
   nothingSecured: 'Näischt vun dësem Ticket gëtt ausserhalb vum Jira behalen.',
   tooLargeToShow: 'Dat ass ze grouss fir hei ze weisen.',
   cannotPreview: (mediaType) => `De jvault kann ${mediaType} net op enger Säit weisen.`,
+  download: 'Eng Kopie eroflueden',
+  downloading: 'D\u2019Kopie gëtt virbereet…',
+  downloadRefused: 'Dir dierft dat hei liesen, awer keng Kopie mathuelen.',
   notInJira: 'Net am Jira',
   jiraRejected: 'De Jira huet dësen Ticket refuséiert. Maacht d’Ticketusiicht op fir ze gesinn, wat dra steet.',
   ticketView: 'Ticketusiicht',

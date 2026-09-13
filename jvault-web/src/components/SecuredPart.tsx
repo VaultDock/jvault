@@ -4,14 +4,15 @@ import type { AdfNode } from '../adf/types';
 import { ApiError, api } from '../api/client';
 import type { RenderedContent, TicketPart } from '../api/types';
 import { useT } from '../i18n';
-import { LockIcon, VaultIcon } from './icons';
+import { DownloadIcon, LockIcon, VaultIcon } from './icons';
 
 /**
  * One secured field, shown in place.
  *
  * <p>The point of the page: the value is read here, formatted the way Jira would have shown it,
  * rather than arriving in a downloads folder. Reading it needs VIEW; taking a copy is a separate
- * grant, and this asks for neither more nor less than reading.
+ * grant, and a separate act — the button below, which asks for DOWNLOAD and says so plainly when
+ * the answer is no.
  */
 export function SecuredPart({ part }: { part: TicketPart }) {
   const { t } = useT();
@@ -45,6 +46,7 @@ export function SecuredPart({ part }: { part: TicketPart }) {
         <VaultIcon />
         <span className="secured__name">{part.fieldKey ?? part.partType.toLowerCase()}</span>
         <span className="chip chip--class">{part.classification.toLowerCase()}</span>
+        <DownloadButton contentRef={part.contentRef} />
       </div>
 
       <div className="secured__body">
@@ -63,6 +65,61 @@ export function SecuredPart({ part }: { part: TicketPart }) {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Taking a copy, as a deliberate act.
+ *
+ * <p>Fetched rather than linked: a refusal belongs beside the thing refused, not on a page of
+ * its own where the ticket used to be. What comes back is handed to the browser under the name
+ * the server chose, which is the only place the filename is ever disclosed.
+ */
+function DownloadButton({ contentRef }: { contentRef: string }) {
+  const { t } = useT();
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setRefused(null);
+    try {
+      const { blob, filename } = await api.downloadContent(contentRef);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // The object URL pins the blob in memory until it is let go of, but revoking it in this
+      // same tick cancels the save in some browsers before it has read a byte.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (cause) {
+      setRefused(
+        cause instanceof ApiError && cause.status === 403
+          ? t.downloadRefused
+          : cause instanceof ApiError
+            ? cause.message
+            : t.errorUnreachable,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="secured__take">
+      {refused ? (
+        <span className="secured__refused" role="alert">
+          {refused}
+        </span>
+      ) : null}
+      <button type="button" className="linklike" onClick={save} disabled={busy}>
+        <DownloadIcon />
+        <span>{busy ? t.downloading : t.download}</span>
+      </button>
+    </span>
   );
 }
 

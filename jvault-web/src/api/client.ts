@@ -87,6 +87,28 @@ export const api = {
       `/api/v1/content/${encodeURIComponent(contentRef)}/render`,
     ),
 
+  /**
+   * A copy of the content, as a file.
+   *
+   * <p>Fetched rather than linked. A plain link would navigate away on a refusal and leave the
+   * reader looking at a JSON problem document where their ticket used to be, and it would give
+   * the browser no chance to be told the filename — which the API sends only in this response,
+   * to a caller it has just authorized for it.
+   */
+  downloadContent: async (contentRef: string): Promise<{ blob: Blob; filename: string }> => {
+    const response = await fetch(
+      `/api/v1/content/${encodeURIComponent(contentRef)}/download`,
+      { headers: { Accept: '*/*' } },
+    );
+    if (!response.ok) {
+      throw new ApiError(await problemFrom(response), response.status);
+    }
+    return {
+      blob: await response.blob(),
+      filename: filenameFrom(response.headers.get('Content-Disposition')),
+    };
+  },
+
   ticket: (ticketRef: string) =>
     request<TicketResponse>(`/api/v1/tickets/${encodeURIComponent(ticketRef)}`),
 
@@ -149,3 +171,9 @@ export const api = {
       body: JSON.stringify(body),
     }),
 };
+
+/** The name the server gave the file, or a neutral one if it gave none. */
+function filenameFrom(disposition: string | null): string {
+  const match = /filename="([^"]*)"/.exec(disposition ?? '');
+  return match?.[1] ? match[1] : 'jvault-content';
+}

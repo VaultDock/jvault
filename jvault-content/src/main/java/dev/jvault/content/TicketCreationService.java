@@ -184,17 +184,14 @@ public final class TicketCreationService {
                 .anyMatch(part -> resolve(command, part.fieldKey())
                         .linkPlacements().contains(LinkPlacement.REMOTE_LINK));
 
-        // A surrogate that already says where the content went is the reference, and a remote
-        // link beside it would be a second name for the same place — the reader has to open
-        // both to learn they are the same. The link belongs in the text somebody is already
-        // reading; the remote link is what stands in when no surrogate carries one, which is
-        // the case for a ticket whose only secured part is an attachment.
+        // Both places, deliberately. The surrogate is what a reader of the description sees;
+        // the remote link is what the issue's own links panel lists, and someone scanning an
+        // issue for "where does this one keep its material" looks there rather than reading
+        // every field. They name the same ticket, which is the point — not two destinations.
         String ticketLink = links.linkToTicket(ticket.ticketRef());
-        boolean alreadyReferenced = ticket.jiraFields().values().stream()
-                .anyMatch(value -> value != null && value.contains(ticketLink));
 
-        if (anyLinked && !alreadyReferenced) {
-            // One reference for the ticket, and only one: see VaultReference.
+        if (anyLinked) {
+            // One link for the ticket however many parts it has: see VaultReference.
             effects.add(outbox.append(OutboxEntry.pending(ticket.ticketRef(),
                     command.deploymentId(), lane, JiraOperation.UPSERT_REMOTE_LINK,
                     VaultReference.EFFECT_KEY,

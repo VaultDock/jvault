@@ -153,8 +153,8 @@ class EndToEndTicketCreationTest {
         }
 
         @Test
-        @DisplayName("a surrogate that already links the ticket is the one reference")
-        void surrogateLinkReplacesTheRemoteLink() {
+        @DisplayName("the ticket is named in the description and in the issue's links alike")
+        void theTicketIsReachableFromBothPlaces() {
             var creationWithTicketLink = new TicketCreationService(
                     policiesLinkingTheTicket(), contentService, tickets, outbox,
                     new LinkFactory("https://jvault.example.com"),
@@ -163,12 +163,12 @@ class EndToEndTicketCreationTest {
             TicketCreationService.Result result =
                     creationWithTicketLink.create(incidentCommand());
 
-            // The description says where the content went. A remote link beside it would be a
-            // second name for the same place, and the reader has to open both to find that out.
+            // Two ways to the same ticket, for two ways of reading an issue: the description
+            // for somebody reading it, the links panel for somebody scanning it.
+            String ticketRef = result.ticket().ticketRef();
+            assertThat(result.ticket().jiraFields().get("description")).contains("/t/" + ticketRef);
             assertThat(result.effects()).extracting(OutboxEntry::effectKey)
-                    .containsExactly("create-issue");
-            assertThat(result.ticket().jiraFields().get("description"))
-                    .contains("/t/" + result.ticket().ticketRef());
+                    .containsExactly("create-issue", "remote-link:ticket");
         }
 
         @Test

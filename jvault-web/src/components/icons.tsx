@@ -46,6 +46,14 @@ export const LockIcon = () => (
   </svg>
 );
 
+export const DownloadIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 4v11" {...stroke} />
+    <path d="M8 11l4 4 4-4" {...stroke} />
+    <path d="M5 19h14" {...stroke} />
+  </svg>
+);
+
 export const EmptyIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M4 7h16M4 12h16M4 17h10" {...stroke} />
