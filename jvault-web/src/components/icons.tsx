@@ -52,6 +52,14 @@ export const EmptyIcon = () => (
   </svg>
 );
 
+export const CameraIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"
+          {...stroke} />
+    <circle cx="12" cy="13" r="3.2" {...stroke} />
+  </svg>
+);
+
 export const BoldIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" {...stroke} />

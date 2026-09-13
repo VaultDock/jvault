@@ -69,6 +69,9 @@ export interface Strings {
   attachmentsToJiraHint: string;
   chooseFiles: string;
   dropHere: string;
+  dropOrPaste: string;
+  takeScreenshot: string;
+  captureFailed: string;
   uploading: string;
   uploaded: string;
   uploadFailed: string;
@@ -131,6 +134,9 @@ const en: Strings = {
   attachmentsToJiraHint: 'Policy keeps attachments in Jira for this project, and jvault does not upload to Jira yet. Attach them in Jira instead.',
   chooseFiles: 'Choose files',
   dropHere: 'or drop them here',
+  dropOrPaste: 'or drop them here, or paste a screenshot',
+  takeScreenshot: 'Take screenshot',
+  captureFailed: 'The screenshot could not be captured.',
   uploading: 'uploading…',
   uploaded: 'uploaded',
   uploadFailed: 'failed',
@@ -193,6 +199,9 @@ const de: Strings = {
   attachmentsToJiraHint: 'Für dieses Projekt bleiben Anhänge laut Richtlinie in Jira, und jvault lädt noch nicht zu Jira hoch. Hängen Sie sie in Jira an.',
   chooseFiles: 'Dateien wählen',
   dropHere: 'oder hierher ziehen',
+  dropOrPaste: 'oder hierher ziehen oder einen Screenshot einfügen',
+  takeScreenshot: 'Screenshot aufnehmen',
+  captureFailed: 'Der Screenshot konnte nicht aufgenommen werden.',
   uploading: 'wird hochgeladen…',
   uploaded: 'hochgeladen',
   uploadFailed: 'fehlgeschlagen',
@@ -255,6 +264,9 @@ const fr: Strings = {
   attachmentsToJiraHint: 'Pour ce projet, la politique conserve les pièces jointes dans Jira, et jvault ne sait pas encore y téléverser. Joignez-les dans Jira.',
   chooseFiles: 'Choisir des fichiers',
   dropHere: 'ou déposez-les ici',
+  dropOrPaste: 'ou déposez-les ici, ou collez une capture',
+  takeScreenshot: 'Faire une capture',
+  captureFailed: 'La capture n’a pas pu être prise.',
   uploading: 'envoi…',
   uploaded: 'envoyé',
   uploadFailed: 'échec',
@@ -317,6 +329,9 @@ const es: Strings = {
   attachmentsToJiraHint: 'En este proyecto la política mantiene los adjuntos en Jira, y jvault aún no sube a Jira. Adjúntelos en Jira.',
   chooseFiles: 'Elegir archivos',
   dropHere: 'o suéltelos aquí',
+  dropOrPaste: 'o suéltelos aquí, o pegue una captura',
+  takeScreenshot: 'Hacer captura',
+  captureFailed: 'No se pudo hacer la captura.',
   uploading: 'subiendo…',
   uploaded: 'subido',
   uploadFailed: 'error',
@@ -379,6 +394,9 @@ const it: Strings = {
   attachmentsToJiraHint: 'Per questo progetto la policy tiene gli allegati in Jira, e jvault non carica ancora su Jira. Allegali in Jira.',
   chooseFiles: 'Scegli i file',
   dropHere: 'oppure trascinali qui',
+  dropOrPaste: 'oppure trascinali qui, o incolla una schermata',
+  takeScreenshot: 'Cattura schermata',
+  captureFailed: 'Non è stato possibile catturare la schermata.',
   uploading: 'caricamento…',
   uploaded: 'caricato',
   uploadFailed: 'non riuscito',
@@ -441,6 +459,9 @@ const nl: Strings = {
   attachmentsToJiraHint: 'Voor dit project houdt het beleid bijlagen in Jira, en jvault uploadt nog niet naar Jira. Voeg ze in Jira toe.',
   chooseFiles: 'Bestanden kiezen',
   dropHere: 'of sleep ze hierheen',
+  dropOrPaste: 'of sleep ze hierheen, of plak een schermafbeelding',
+  takeScreenshot: 'Schermafbeelding maken',
+  captureFailed: 'De schermafbeelding kon niet worden gemaakt.',
   uploading: 'uploaden…',
   uploaded: 'geüpload',
   uploadFailed: 'mislukt',
@@ -503,6 +524,9 @@ const pt: Strings = {
   attachmentsToJiraHint: 'Neste projeto a política mantém os anexos no Jira, e o jvault ainda não carrega para o Jira. Anexe-os no Jira.',
   chooseFiles: 'Escolher ficheiros',
   dropHere: 'ou largue-os aqui',
+  dropOrPaste: 'ou largue-os aqui, ou cole uma captura',
+  takeScreenshot: 'Fazer captura',
+  captureFailed: 'Não foi possível fazer a captura.',
   uploading: 'a enviar…',
   uploaded: 'enviado',
   uploadFailed: 'falhou',
@@ -565,6 +589,9 @@ const lb: Strings = {
   attachmentsToJiraHint: 'Fir dëse Projet bleiwen d’Unhäng laut Reegel am Jira, an de jvault lued nach net op de Jira erop. Häng se am Jira un.',
   chooseFiles: 'Fichiere wielen',
   dropHere: 'oder zitt se hei hin',
+  dropOrPaste: 'oder zitt se hei hin, oder paakt e Screenshot an',
+  takeScreenshot: 'Screenshot maachen',
+  captureFailed: 'De Screenshot konnt net gemaach ginn.',
   uploading: 'gëtt eropgelueden…',
   uploaded: 'eropgelueden',
   uploadFailed: 'feelgeschloen',

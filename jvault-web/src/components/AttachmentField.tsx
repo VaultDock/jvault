@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Placement } from '../api/types';
 import { useT } from '../i18n';
-import { LockIcon, VaultIcon } from './icons';
+import { canCapture, captureScreenshot, imagesFromPaste } from './capture';
+import { CameraIcon, LockIcon, VaultIcon } from './icons';
 
 export interface PendingFile {
   id: string;
@@ -43,15 +44,52 @@ export function AttachmentField({
   // someone picks a file beats saying so after.
   const supported = placement !== 'JIRA';
   const input = useRef<HTMLInputElement>(null);
+  const zone = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const locked = disabled || !supported;
 
-  function add(chosen: FileList | null) {
-    if (!chosen) {
+  // Pasting is the habit people already have: every bug report in the world starts with a
+  // screenshot on the clipboard. Scoped to this control rather than the document, so a paste
+  // into the description stays in the description.
+  useEffect(() => {
+    const element = zone.current;
+    if (!element || locked) {
       return;
     }
+    function onPaste(event: ClipboardEvent) {
+      const images = imagesFromPaste(event.clipboardData);
+      if (images.length > 0) {
+        event.preventDefault();
+        addFiles(images);
+      }
+    }
+    element.addEventListener('paste', onPaste);
+    return () => element.removeEventListener('paste', onPaste);
+  });
+
+  async function takeScreenshot() {
+    setCaptureError(null);
+    try {
+      addFiles([await captureScreenshot()]);
+    } catch (error) {
+      // Declining the browser's picker is the common case and not a failure worth shouting
+      // about; anything else is worth naming.
+      if (!(error instanceof DOMException && error.name === 'NotAllowedError')) {
+        setCaptureError(t.captureFailed);
+      }
+    }
+  }
+
+  function add(chosen: FileList | null) {
+    if (chosen) {
+      addFiles(Array.from(chosen));
+    }
+  }
+
+  function addFiles(chosen: File[]) {
     const added: PendingFile[] = [];
-    for (const file of Array.from(chosen)) {
+    for (const file of chosen) {
       added.push({
         id: `${file.name}:${file.size}:${file.lastModified}`,
         file,
@@ -91,6 +129,8 @@ export function AttachmentField({
       </div>
 
       <div
+        ref={zone}
+        tabIndex={locked ? -1 : 0}
         className={`dropzone${dragging ? ' is-dragging' : ''}${locked ? ' is-disabled' : ''}`}
         onDragOver={(event) => {
           event.preventDefault();
@@ -125,14 +165,29 @@ export function AttachmentField({
         >
           {t.chooseFiles}
         </button>
-        <span className="dropzone__hint">{supported ? t.dropHere : t.attachmentsToJira}</span>
+        {supported && canCapture() ? (
+          <button type="button" className="btn-secondary" disabled={locked}
+                  onClick={takeScreenshot}>
+            <CameraIcon />
+            {t.takeScreenshot}
+          </button>
+        ) : null}
+        <span className="dropzone__hint">
+          {supported ? (canCapture() ? t.dropOrPaste : t.dropHere) : t.attachmentsToJira}
+        </span>
       </div>
+
+      {captureError ? (
+        <span className="field__error" role="alert">
+          {captureError}
+        </span>
+      ) : null}
 
       {files.length > 0 ? (
         <ul className="filelist">
           {files.map((pending) => (
             <li key={pending.id} className={`filelist__item is-${pending.status}`}>
-              <VaultIcon />
+              <Thumbnail file={pending.file} />
               <span className="filelist__name">{pending.file.name}</span>
               <span className="filelist__size">{humanSize(pending.file.size)}</span>
               <span className="filelist__status">{statusLabel(pending, t)}</span>
@@ -156,6 +211,34 @@ export function AttachmentField({
       </span>
     </div>
   );
+}
+
+/**
+ * A preview for an image, the vault mark for anything else.
+ *
+ * <p>Worth the code for screenshots specifically: three files called screenshot-…T16-42-0x.png
+ * are indistinguishable by name, and the whole point of taking them was what they show.
+ */
+function Thumbnail({ file }: { file: File }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file.type.startsWith('image/')) {
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    // Revoked on the way out: an object URL holds the whole file in memory until it is.
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+      setUrl(null);
+    };
+  }, [file]);
+
+  if (url) {
+    return <img className="filelist__thumb" src={url} alt="" />;
+  }
+  return <VaultIcon />;
 }
 
 function statusLabel(pending: PendingFile, t: ReturnType<typeof useT>['t']): string {
