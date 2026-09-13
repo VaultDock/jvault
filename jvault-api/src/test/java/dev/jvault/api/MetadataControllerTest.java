@@ -189,6 +189,27 @@ class MetadataControllerTest {
     }
 
     @Test
+    @DisplayName("a parent field gets an issue picker, with Jira validating the choice")
+    void parentIsAnIssuePicker() throws Exception {
+        var parent = field(fields(), "parent");
+
+        assertThat(parent.get("control").asText()).isEqualTo("ISSUE");
+        // Which issue types may parent which depends on a hierarchy jvault cannot read, so the
+        // candidate list is a best effort and Jira has the last word.
+        assertThat(parent.get("supportLevel").asText()).isEqualTo("DELEGATED_VALIDATION");
+    }
+
+    @Test
+    @DisplayName("issue search is served for the project the form is for")
+    void issueSearchIsServed() throws Exception {
+        String body = mvc.perform(get("/api/v1/meta/projects/KAN/issues?query=payroll"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(JSON.readTree(body).get(0).get("key").asText()).isEqualTo("KAN-1");
+    }
+
+    @Test
     @DisplayName("an anonymous caller gets 401")
     void anonymousIsRefused() throws Exception {
         caller.set(null);
@@ -248,6 +269,11 @@ class MetadataControllerTest {
                         new UserRef("5b10a3", "Grace Hopper", null, true));
                 // The assignable list is narrower, which is the distinction under test.
                 return assignable ? List.of(everyone.get(0)) : everyone;
+            }
+
+            @Override
+            public List<IssueRef> searchIssues(String projectKey, String query) {
+                return List.of(new IssueRef("KAN-1", "Migrate the payroll export", "Epic"));
             }
 
             @Override

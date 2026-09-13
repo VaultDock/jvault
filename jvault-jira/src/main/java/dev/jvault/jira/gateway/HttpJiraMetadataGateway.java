@@ -30,6 +30,9 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
     /** A picker shows a page, not a directory. Anything longer means typing more, not scrolling. */
     private static final int MAX_USERS = 20;
 
+    /** Same reasoning: a picker shows a page, and more typing beats more scrolling. */
+    private static final int MAX_ISSUES = 20;
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JiraDeployment deployment;
@@ -119,6 +122,44 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
                     user.path("active").asBoolean(true)));
         }
         return List.copyOf(users);
+    }
+
+    @Override
+    public List<IssueRef> searchIssues(String projectKey, String query) {
+        // Quoted and escaped: a project key comes from configuration, but the query is whatever
+        // somebody typed, and a stray quote in a JQL string is a syntax error at best.
+        var jql = new StringBuilder("project = \"").append(jqlEscape(projectKey))
+                .append("\" AND issuetype not in subtaskIssueTypes()");
+
+        if (query != null && !query.isBlank()) {
+            String term = jqlEscape(query.trim());
+            jql.append(" AND (summary ~ \"").append(term).append("*\"")
+                    .append(" OR key = \"").append(term).append("\")");
+        }
+        jql.append(" ORDER BY updated DESC");
+
+        JsonNode body = get("/rest/api/" + deployment.apiVersion() + "/search/jql"
+                + "?jql=" + encode(jql.toString())
+                + "&fields=" + encode("summary,issuetype")
+                + "&maxResults=" + MAX_ISSUES);
+
+        var issues = new ArrayList<IssueRef>();
+        for (JsonNode issue : body.path("issues")) {
+            issues.add(new IssueRef(
+                    issue.path("key").asText(null),
+                    issue.path("fields").path("summary").asText(null),
+                    issue.path("fields").path("issuetype").path("name").asText(null)));
+        }
+        return List.copyOf(issues);
+    }
+
+    /**
+     * Neutralises the characters that end a JQL string literal.
+     *
+     * <p>A backslash first, or escaping the quote would be undone by escaping the escape.
+     */
+    private static String jqlEscape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private static FieldMeta toFieldMeta(JsonNode field) {

@@ -10,7 +10,8 @@ export type Control =
   | 'SELECT'
   | 'MULTI_SELECT'
   | 'LABELS'
-  | 'USER';
+  | 'USER'
+  | 'ISSUE';
 
 export interface AllowedValue {
   id: string;
@@ -111,4 +112,10 @@ export interface UploadedAttachment {
   classification: string;
   jiraSurrogate: string;
   link: string;
+}
+
+export interface IssueRef {
+  key: string;
+  summary: string | null;
+  issueTypeName: string | null;
 }

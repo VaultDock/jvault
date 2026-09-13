@@ -57,6 +57,7 @@ export interface Strings {
   heldInVault: string;
   open: string;
   searchPeople: string;
+  searchIssues: string;
   searching: string;
   noMatches: string;
   clear: string;
@@ -118,6 +119,7 @@ const en: Strings = {
   heldInVault: 'Held in jvault',
   open: 'open',
   searchPeople: 'Search people…',
+  searchIssues: 'Search issues…',
   searching: 'Searching…',
   noMatches: 'No matches',
   clear: 'Clear',
@@ -179,6 +181,7 @@ const de: Strings = {
   heldInVault: 'In jvault gespeichert',
   open: 'öffnen',
   searchPeople: 'Personen suchen…',
+  searchIssues: 'Vorgänge suchen…',
   searching: 'Suchen…',
   noMatches: 'Keine Treffer',
   clear: 'Leeren',
@@ -240,6 +243,7 @@ const fr: Strings = {
   heldInVault: 'Conservé dans jvault',
   open: 'ouvrir',
   searchPeople: 'Rechercher des personnes…',
+  searchIssues: 'Rechercher des tickets…',
   searching: 'Recherche…',
   noMatches: 'Aucun résultat',
   clear: 'Effacer',
@@ -301,6 +305,7 @@ const es: Strings = {
   heldInVault: 'Guardado en jvault',
   open: 'abrir',
   searchPeople: 'Buscar personas…',
+  searchIssues: 'Buscar incidencias…',
   searching: 'Buscando…',
   noMatches: 'Sin resultados',
   clear: 'Borrar',
@@ -362,6 +367,7 @@ const it: Strings = {
   heldInVault: 'Conservato in jvault',
   open: 'apri',
   searchPeople: 'Cerca persone…',
+  searchIssues: 'Cerca ticket…',
   searching: 'Ricerca…',
   noMatches: 'Nessun risultato',
   clear: 'Cancella',
@@ -423,6 +429,7 @@ const nl: Strings = {
   heldInVault: 'Bewaard in jvault',
   open: 'openen',
   searchPeople: 'Personen zoeken…',
+  searchIssues: 'Tickets zoeken…',
   searching: 'Zoeken…',
   noMatches: 'Geen resultaten',
   clear: 'Wissen',
@@ -484,6 +491,7 @@ const pt: Strings = {
   heldInVault: 'Guardado no jvault',
   open: 'abrir',
   searchPeople: 'Procurar pessoas…',
+  searchIssues: 'Procurar tickets…',
   searching: 'A procurar…',
   noMatches: 'Sem resultados',
   clear: 'Limpar',
@@ -545,6 +553,7 @@ const lb: Strings = {
   heldInVault: 'Am jvault gespäichert',
   open: 'opmaachen',
   searchPeople: 'Leit sichen…',
+  searchIssues: 'Ticketë sichen…',
   searching: 'Gëtt gesicht…',
   noMatches: 'Keng Resultater',
   clear: 'Eidel maachen',

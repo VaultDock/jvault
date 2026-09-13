@@ -38,6 +38,16 @@ public interface JiraMetadataGateway {
     List<UserRef> searchUsers(String projectKey, String query, boolean assignable);
 
     /**
+     * Issues in a project that could be a parent.
+     *
+     * <p>Subtasks are excluded because nothing parents a subtask. Beyond that this does not try
+     * to work out which types the hierarchy permits: that depends on a configuration jvault
+     * cannot read, so the list is offered best-effort and Jira validates the choice on submit
+     * (docs/02-jira-parity-scope.md 2.3).
+     */
+    List<IssueRef> searchIssues(String projectKey, String query);
+
+    /**
      * The account jvault is acting as.
      *
      * <p>Its locale matters beyond politeness: Jira returns field names in the language of the
@@ -58,6 +68,15 @@ public interface JiraMetadataGateway {
      * why a text box asking for one is not a control so much as an obstacle.
      */
     record UserRef(String accountId, String displayName, String email, boolean active) {
+    }
+
+    /**
+     * An issue a parent field can point at.
+     *
+     * <p>Jira wants a key. A key is at least something a person recognises, unlike an account id,
+     * but nobody remembers which of forty keys is the epic they meant.
+     */
+    record IssueRef(String key, String summary, String issueTypeName) {
     }
 
     record Project(String id, String key, String name, String style) {

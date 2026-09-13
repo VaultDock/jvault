@@ -96,6 +96,20 @@ public class MetadataController {
                 ResponseEntity.ok(metadata.searchUsers(projectKey, query, assignable)));
     }
 
+    /**
+     * Issues that could be a parent.
+     *
+     * <p>A parent field takes an issue key, and while a key is at least recognisable, nobody
+     * remembers which of forty of them is the epic they meant.
+     */
+    @GetMapping("/projects/{projectKey}/issues")
+    public ResponseEntity<?> issues(@PathVariable String projectKey,
+                                    @RequestParam(defaultValue = "") String query,
+                                    HttpServletRequest request) {
+        return authenticated(request, caller ->
+                ResponseEntity.ok(metadata.searchIssues(projectKey, query)));
+    }
+
     @GetMapping("/projects/{projectKey}/issuetypes")
     public ResponseEntity<?> issueTypes(@PathVariable String projectKey,
                                         HttpServletRequest request) {
@@ -148,6 +162,9 @@ public class MetadataController {
         if ("date".equals(field.schemaType()) || "datetime".equals(field.schemaType())) {
             return Control.DATE;
         }
+        if ("issuelink".equals(field.schemaType())) {
+            return Control.ISSUE;
+        }
         return switch (JiraFieldEncoding.forField(
                 field.schemaType(), field.customType(), field.key())) {
             case RICH_TEXT -> Control.RICH_TEXT;
@@ -175,6 +192,11 @@ public class MetadataController {
         // exists to prevent.
         if ("attachment".equals(field.key()) || "issuerestriction".equals(field.schemaType())) {
             return SupportLevel.READ_ONLY;
+        }
+        // The list of candidates is offered best-effort: which issue types may parent which
+        // depends on a hierarchy configuration jvault cannot read, so Jira has the last word.
+        if ("issuelink".equals(field.schemaType())) {
+            return SupportLevel.DELEGATED_VALIDATION;
         }
         String type = field.customType();
         if (type == null) {
@@ -228,7 +250,7 @@ public class MetadataController {
 
     /** The widget the form renders. Not a type — a type has many possible widgets. */
     public enum Control {
-        TEXT, RICH_TEXT, NUMBER, DATE, SELECT, MULTI_SELECT, LABELS, USER
+        TEXT, RICH_TEXT, NUMBER, DATE, SELECT, MULTI_SELECT, LABELS, USER, ISSUE
     }
 
     public record FormDefinition(String projectKey, String issueTypeId, List<FormField> fields) {

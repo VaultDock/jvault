@@ -2,6 +2,7 @@ import type {
   CreateTicketRequest,
   FormDefinition,
   Identity,
+  IssueRef,
   IssueType,
   Problem,
   Project,
@@ -62,6 +63,12 @@ export const api = {
   me: () => request<Identity>('/api/v1/meta/me'),
 
   projects: () => request<Project[]>('/api/v1/meta/projects'),
+
+  searchIssues: (projectKey: string, query: string) =>
+    request<IssueRef[]>(
+      `/api/v1/meta/projects/${encodeURIComponent(projectKey)}/issues` +
+        `?query=${encodeURIComponent(query)}`,
+    ),
 
   searchUsers: (projectKey: string, query: string, assignable: boolean) =>
     request<UserRef[]>(

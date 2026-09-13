@@ -2,6 +2,7 @@ import type { FormField } from '../api/types';
 import { useT } from '../i18n';
 import { FieldHint, PlacementBadge, SupportBadge } from './PlacementBadge';
 import { RichTextField } from './RichTextField';
+import { IssuePicker } from './IssuePicker';
 import { UserPicker } from './UserPicker';
 
 /**
@@ -145,6 +146,18 @@ function renderControl(
           value={value}
           placeholder={t.commaSeparated}
           onChange={(event) => onChange(event.target.value)}
+        />
+      );
+
+    case 'ISSUE':
+      return (
+        <IssuePicker
+          id={id}
+          projectKey={projectKey}
+          value={value}
+          disabled={!editable}
+          required={field.required}
+          onChange={onChange}
         />
       );
 
