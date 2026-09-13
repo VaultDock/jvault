@@ -188,3 +188,41 @@ readings (a) and (c) need both, reading (b) needs Data Center alone. The HTTP cl
 classifier and the deployment abstraction are shared by both and are built. What Q0 still gates is
 whether a Cloud deployment is configured at all, and whether it needs a forward proxy —
 `CloudDeployment` already accepts a gateway base URL for exactly that.
+
+## Running it
+
+```bash
+docker run -d --name jvault-dev-db -e POSTGRES_USER=jvault -e POSTGRES_PASSWORD=jvault \
+  -e POSTGRES_DB=jvault -p 5433:5432 postgres:16-alpine
+
+export JVAULT_JIRA_BASEURL=https://your-site.atlassian.net
+export JVAULT_JIRA_EMAIL=service-account@example.com
+export JVAULT_JIRA_APITOKEN=...        # from the environment, never from a file in the repo
+
+cd jvault-api && SPRING_PROFILES_ACTIVE=dev mvn spring-boot:run
+cd jvault-web && npm install && npm run dev
+```
+
+The `dev` profile trusts an identity header, keeps encryption keys in the JVM, and lets the Jira
+half of the authorization check always allow. It says so in the startup log, three times. Without
+`jvault.dev.insecure-auth=true` the application refuses to start rather than falling back to any
+of that.
+
+### Tests
+
+`mvn test` skips everything that needs a database, and a skipped test proves nothing — which is
+how two bugs in the PostgreSQL dialect survived a long time. Run the full suite with:
+
+```bash
+./scripts/integration-tests.sh
+```
+
+### What has actually been run against what
+
+| | verified | how |
+|---|---|---|
+| PostgreSQL | yes | Testcontainers, every repository |
+| SQL Server | no | scripts marked UNVERIFIED; dialect warns at startup |
+| Oracle | no | scripts marked UNVERIFIED; dialect warns at startup |
+| Jira Cloud | yes | `LiveJiraSmokeTest`, against a real site, when credentials are supplied |
+| Jira Data Center | no | no instance available |
