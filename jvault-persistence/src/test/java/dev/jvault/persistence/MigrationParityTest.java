@@ -27,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MigrationParityTest {
 
     private static final List<String> ENGINES = List.of("postgresql", "sqlserver", "oracle");
+    private static final String OUTBOX = "V1__outbox.sql";
+    private static final String VAULT = "V2__vault.sql";
 
     private static final Pattern COLUMN = Pattern.compile(
             "^\\s{4}([a-z_]+)\\s+[A-Z]", Pattern.MULTILINE);
@@ -71,16 +73,64 @@ class MigrationParityTest {
     }
 
     @Test
-    @DisplayName("the unverified engines say so in the script itself")
+    @DisplayName("the unverified engines say so in every script")
     void unverifiedScriptsAreLabelled() {
-        assertThat(scriptOf("sqlserver")).contains("UNVERIFIED");
-        assertThat(scriptOf("oracle")).contains("UNVERIFIED");
-        assertThat(scriptOf("postgresql")).doesNotContain("UNVERIFIED");
+        for (String script : List.of(OUTBOX, VAULT)) {
+            assertThat(scriptOf("sqlserver", script)).contains("UNVERIFIED");
+            assertThat(scriptOf("oracle", script)).contains("UNVERIFIED");
+            assertThat(scriptOf("postgresql", script)).doesNotContain("UNVERIFIED");
+        }
+    }
+
+    @Test
+    @DisplayName("every engine's vault tables declare the same columns")
+    void vaultColumnsMatchAcrossEngines() {
+        // V1 is not the only script any more, and a second one that nobody compares is exactly
+        // how the three engines start meaning different things.
+        Set<String> reference = columnsOf("postgresql", VAULT);
+        assertThat(reference)
+                .as("the reference script should define the tables we think it does")
+                .contains("ticket_ref", "content_ref", "version_id", "wrapped_dek",
+                        "display_name_enc", "grant_id", "permission");
+
+        for (String engine : ENGINES) {
+            assertThat(columnsOf(engine, VAULT))
+                    .as("%s/%s has drifted from postgresql/%s", engine, VAULT, VAULT)
+                    .containsExactlyInAnyOrderElementsOf(reference);
+        }
+    }
+
+    @Test
+    @DisplayName("every engine constrains the dedupe key that stops a replay duplicating")
+    void dedupeConstraintPresentEverywhere() {
+        for (String engine : ENGINES) {
+            assertThat(scriptOf(engine, VAULT).toLowerCase(Locale.ROOT))
+                    .as("%s is missing the dedupe uniqueness that stops a replayed message "
+                            + "creating a second Jira issue", engine)
+                    .contains("uq_ticket_dedupe");
+        }
+    }
+
+    @Test
+    @DisplayName("no engine stores a display name in the clear")
+    void displayNamesAreEncryptedEverywhere() {
+        for (String engine : ENGINES) {
+            String script = scriptOf(engine, VAULT);
+            assertThat(script)
+                    .as("%s stores a display name, which must be encrypted: a filename is "
+                            + "frequently the most sensitive thing about a file", engine)
+                    .contains("display_name_enc")
+                    .doesNotContain("display_name  ");
+        }
     }
 
     private static Set<String> columnsOf(String engine) {
+        return columnsOf(engine, OUTBOX);
+    }
+
+    private static Set<String> columnsOf(String engine, String script) {
         var columns = new LinkedHashSet<String>();
-        Matcher matcher = COLUMN.matcher(scriptOf(engine));
+        Matcher matcher = COLUMN.matcher(scriptOf(engine, script));
         while (matcher.find()) {
             columns.add(matcher.group(1));
         }
@@ -90,7 +140,11 @@ class MigrationParityTest {
     }
 
     private static String scriptOf(String engine) {
-        String path = "/db/migration/" + engine + "/V1__outbox.sql";
+        return scriptOf(engine, OUTBOX);
+    }
+
+    private static String scriptOf(String engine, String script) {
+        String path = "/db/migration/" + engine + "/" + script;
         try (InputStream in = MigrationParityTest.class.getResourceAsStream(path)) {
             assertThat(in).as("missing migration %s", path).isNotNull();
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);

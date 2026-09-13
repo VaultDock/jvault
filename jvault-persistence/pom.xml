@@ -22,6 +22,23 @@
       <artifactId>jvault-outbox</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- Persistence is an adapter for the ports these modules declare: it depends on them, and
+         nothing depends on it except the composition root. -->
+    <dependency>
+      <groupId>dev.jvault</groupId>
+      <artifactId>jvault-content</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.jvault</groupId>
+      <artifactId>jvault-authz</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>dev.jvault</groupId>
+      <artifactId>jvault-crypto</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>com.zaxxer</groupId>
       <artifactId>HikariCP</artifactId>

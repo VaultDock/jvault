@@ -20,17 +20,23 @@
 # matters and the rest is harmless.
 set -euo pipefail
 
+# Check the daemon through the CLI's own configuration, BEFORE overriding DOCKER_HOST below.
+# The raw socket serves docker-java but hangs the CLI, so a pre-flight check pointed at it never
+# returns — which looks exactly like a slow test suite.
+if ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
+  echo "Docker is not running. Start Docker Desktop, or these tests will pass by not running." >&2
+  exit 1
+fi
+
 RAW_SOCKET="$HOME/Library/Containers/com.docker.docker/Data/docker.raw.sock"
 if [ -S "$RAW_SOCKET" ]; then
   export DOCKER_HOST="unix://$RAW_SOCKET"
-  # Ryuk, the resource reaper, bind-mounts the socket into a container, and the raw socket
-  # cannot be mounted. It mounts this path instead, which reaches the same daemon.
-  export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
-fi
-
-if ! docker info >/dev/null 2>&1; then
-  echo "Docker is not running. Start Docker Desktop, or these tests will pass by not running." >&2
-  exit 1
+  # Ryuk is the resource reaper that removes containers if the JVM dies without cleaning up.
+  # It wants to bind-mount the Docker socket into itself, which the raw socket cannot do, and
+  # its startup also consults the credential helper — thirty seconds on a good day and an
+  # indefinite block when the keychain is locked. Testcontainers still stops its own containers
+  # on a normal exit; what is lost is the cleanup after a kill -9.
+  export TESTCONTAINERS_RYUK_DISABLED=true
 fi
 
 exec mvn "$@" test -Dapi.version=1.44
