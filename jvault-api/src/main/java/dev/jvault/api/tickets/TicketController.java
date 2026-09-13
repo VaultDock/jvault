@@ -14,6 +14,7 @@ import dev.jvault.content.LinkFactory;
 import dev.jvault.content.TicketCommand;
 import dev.jvault.content.TicketCreationService;
 import dev.jvault.content.TicketRecord;
+import dev.jvault.content.ContentMetadataRepository;
 import dev.jvault.content.TicketRepository;
 import dev.jvault.domain.placement.Placement;
 import jakarta.servlet.http.HttpServletRequest;
@@ -57,6 +58,7 @@ public class TicketController {
 
     private final TicketCreationService creation;
     private final TicketRepository tickets;
+    private final ContentMetadataRepository contentMetadata;
     private final ContentAuthorizationService authorization;
     private final CallerResolver callers;
     private final IdempotencyService idempotency;
@@ -64,12 +66,14 @@ public class TicketController {
 
     public TicketController(TicketCreationService creation,
                             TicketRepository tickets,
+                            ContentMetadataRepository contentMetadata,
                             ContentAuthorizationService authorization,
                             CallerResolver callers,
                             IdempotencyService idempotency,
                             LinkFactory links) {
         this.creation = Objects.requireNonNull(creation, "creation");
         this.tickets = Objects.requireNonNull(tickets, "tickets");
+        this.contentMetadata = Objects.requireNonNull(contentMetadata, "contentMetadata");
         this.authorization = Objects.requireNonNull(authorization, "authorization");
         this.callers = Objects.requireNonNull(callers, "callers");
         this.idempotency = Objects.requireNonNull(idempotency, "idempotency");
@@ -170,7 +174,11 @@ public class TicketController {
         if (!decision.isAllowed()) {
             return refuse(decision);
         }
-        return ResponseEntity.ok(TicketResponse.of(ticket, List.of(), links));
+        // The parts, not an empty list: a ticket view that cannot say which fields left Jira is
+        // a ticket view nobody would open. The content itself is not here — each part carries a
+        // link, and following one is authorized separately and audited.
+        return ResponseEntity.ok(
+                TicketResponse.of(ticket, contentMetadata.partsOf(ticket.ticketRef()), links));
     }
 
     private ResponseEntity<?> refuse(AuthorizationDecision decision) {

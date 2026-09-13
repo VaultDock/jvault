@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 public enum SurrogateToken {
 
     LINK("link"),
+    /** The ticket view: everything secured on this ticket, rather than one part of it. */
+    TICKET_LINK("ticketLink"),
     TICKET_REF("ticketRef"),
     TICKET_REF_SHORT("ticketRefShort"),
     CONTENT_REF("contentRef"),

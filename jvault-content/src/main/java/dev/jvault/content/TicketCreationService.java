@@ -131,6 +131,7 @@ public final class TicketCreationService {
                                    String fieldKey) {
         var values = SurrogateRenderer.values();
         values.put(SurrogateToken.LINK, links.linkTo(stored.contentRef()));
+        values.put(SurrogateToken.TICKET_LINK, links.linkToTicket(ticket.ticketRef()));
         values.put(SurrogateToken.CONTENT_REF, stored.contentRef());
         values.put(SurrogateToken.TICKET_REF, ticket.ticketRef());
         values.put(SurrogateToken.TICKET_REF_SHORT, shortRef(ticket.ticketRef()));
@@ -179,19 +180,32 @@ public final class TicketCreationService {
                 lane, JiraOperation.CREATE_ISSUE, "create-issue", createRef, identity,
                 clock.instant())));
 
-        for (ContentRecord part : storedParts) {
-            ResolvedPlacement placement = resolve(command, part.fieldKey());
-            if (!placement.linkPlacements().contains(LinkPlacement.REMOTE_LINK)) {
-                continue;
-            }
-            // globalId makes this write idempotent: Jira upserts on it, so a retry updates the
+        boolean anyLinked = storedParts.stream()
+                .anyMatch(part -> resolve(command, part.fieldKey())
+                        .linkPlacements().contains(LinkPlacement.REMOTE_LINK));
+
+        if (anyLinked) {
+            // One link for the ticket rather than one per part. Somebody reading the issue wants
+            // "show me what is missing from this", and a ticket with four secured fields would
+            // otherwise put four indistinguishable links on it.
+            //
+            // globalId makes the write idempotent: Jira upserts on it, so a retry updates the
             // existing link rather than adding a second (docs/00-verified-capabilities.md 0.6).
+            long securedParts = storedParts.stream()
+                    .filter(part -> resolve(command, part.fieldKey()).isExternallyStored())
+                    .count();
+
             effects.add(outbox.append(OutboxEntry.pending(ticket.ticketRef(),
                     command.deploymentId(), lane, JiraOperation.UPSERT_REMOTE_LINK,
-                    "remote-link:" + part.contentRef(),
-                    Map.of("contentRef", part.contentRef(),
-                            "globalId", "jvault:content:" + part.contentRef(),
-                            "url", links.linkTo(part.contentRef())),
+                    "remote-link:ticket",
+                    Map.of("globalId", "jvault:ticket:" + ticket.ticketRef(),
+                            "url", links.linkToTicket(ticket.ticketRef()),
+                            "title", "Secured content in jvault",
+                            // Counts, never names: a link title is visible to anyone who can see
+                            // the issue, which is a wider audience than the content's.
+                            "summary", securedParts == 1
+                                    ? "1 field is held in jvault"
+                                    : securedParts + " fields are held in jvault"),
                     identity, clock.instant())));
         }
         return effects;

@@ -105,7 +105,8 @@ class TicketControllerTest {
         var authorization = new ContentAuthorizationService(
                 acl(), jiraChecker(), spaceSettings(), clock);
 
-        var controller = new TicketController(creation, tickets, authorization, callerResolver(),
+        var controller = new TicketController(creation, tickets, metadata, authorization,
+                callerResolver(),
                 new IdempotencyService(new InMemoryIdempotencyStore(), clock), links);
 
         mvc = MockMvcBuilders.standaloneSetup(controller)

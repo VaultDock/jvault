@@ -70,14 +70,25 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
             case UPDATE_FIELDS -> ticket.jiraFields().forEach((key, value) ->
                     builder.field(key, value, encodingFor(key)));
             case UPSERT_REMOTE_LINK -> {
+                // Jira upserts on globalId, so replaying this effect updates the existing link
+                // rather than adding a second (verified: docs/00-verified-capabilities.md 0.6).
                 String contentRef = entry.payloadRef().get("contentRef");
-                ContentRecord part = metadata.findCurrent(contentRef)
-                        .orElseThrow(() -> new EffectNoLongerApplicable("PART_DELETED"));
-                // Jira upserts on globalId, so replaying this effect updates rather than
-                // duplicates (verified: docs/00-verified-capabilities.md 0.6).
-                builder.field("globalId", "jvault:content:" + part.contentRef());
-                builder.field("title", titleFor(part));
-                builder.field("url", entry.payloadRef().getOrDefault("url", ""));
+
+                if (contentRef == null) {
+                    // A link for the ticket as a whole. It stays applicable as long as the
+                    // ticket has something secured on it — the parts can change beneath it,
+                    // which is rather the point of linking the ticket rather than each part.
+                    if (metadata.partsOf(ticket.ticketRef()).isEmpty()) {
+                        throw new EffectNoLongerApplicable("NOTHING_SECURED");
+                    }
+                    entry.payloadRef().forEach(builder::field);
+                } else {
+                    ContentRecord part = metadata.findCurrent(contentRef)
+                            .orElseThrow(() -> new EffectNoLongerApplicable("PART_DELETED"));
+                    builder.field("globalId", "jvault:content:" + part.contentRef());
+                    builder.field("title", titleFor(part));
+                    builder.field("url", entry.payloadRef().getOrDefault("url", ""));
+                }
             }
             case ADD_COMMENT, EDIT_COMMENT -> {
                 CommentRecord comment = comments.find(entry.payloadRef().get("commentRef"))

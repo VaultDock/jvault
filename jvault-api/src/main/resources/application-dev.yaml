@@ -8,7 +8,10 @@ spring:
 
 jvault:
   tenant: dev
-  base-url: http://localhost:8080
+  # The origin links point at, which is where a person opens them — the SPA. Its dev server
+  # proxies /c and /api through to this service, so a content link still reaches the API. In a
+  # deployment both sit behind one host and this is simply that host.
+  base-url: http://localhost:5173
   jira:
     deployment-id: jira-cloud-dev
     # Supplied from the environment: JVAULT_JIRA_BASEURL, JVAULT_JIRA_EMAIL,
@@ -34,7 +37,7 @@ jvault:
       classification: RESTRICTED
       storage-route: fs-local
       key-ring: sec-restricted
-      surrogate: "Held in jvault: {{link}}"
+      surrogate: "=== SECURED ===\nThis field is held in jvault and is not in Jira.\nRead it at {{ticketLink}}"
       links: [REMOTE_LINK]
 
     # Documents never go to Jira in this profile. Attachments are the reason most of the storage
@@ -47,7 +50,7 @@ jvault:
       classification: CONFIDENTIAL
       storage-route: fs-local
       key-ring: sec-restricted
-      surrogate: "Document held in jvault: {{link}}"
+      surrogate: "=== SECURED ===\nDocument held in jvault: {{ticketLink}}"
       links: [REMOTE_LINK]
 
   dev:

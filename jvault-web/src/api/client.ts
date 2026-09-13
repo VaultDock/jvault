@@ -62,6 +62,9 @@ async function problemFrom(response: Response): Promise<Problem> {
 export const api = {
   me: () => request<Identity>('/api/v1/meta/me'),
 
+  ticket: (ticketRef: string) =>
+    request<TicketResponse>(`/api/v1/tickets/${encodeURIComponent(ticketRef)}`),
+
   projects: () => request<Project[]>('/api/v1/meta/projects'),
 
   searchIssues: (projectKey: string, query: string) =>

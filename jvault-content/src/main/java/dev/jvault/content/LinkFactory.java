@@ -33,4 +33,18 @@ public final class LinkFactory {
     public String linkTo(String contentRef) {
         return baseUrl + "/c/" + contentRef;
     }
+
+    /**
+     * The ticket as a whole: every part somebody is allowed to see, in one place.
+     *
+     * <p>Jira gets this one rather than a link per part. Someone reading an issue wants "show me
+     * what is missing from this", not a row of indistinguishable content references — and a
+     * ticket with four secured fields would otherwise put four links on the issue.
+     *
+     * <p>Not a capability, like every other link jvault emits: following it is authorized afresh,
+     * so a link that reaches the wrong person still shows them nothing.
+     */
+    public String linkToTicket(String ticketRef) {
+        return baseUrl + "/t/" + ticketRef;
+    }
 }

@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react';
 import { ApiError, api } from './api/client';
 import type { FormDefinition, Identity, IssueType, Project } from './api/types';
 import { CreateIssueForm } from './components/CreateIssueForm';
+import { TicketView } from './components/TicketView';
 import { AlertIcon, EmptyIcon } from './components/icons';
 import { LANGUAGES, TranslationProvider, pickLanguage, useT, type Language } from './i18n';
 
 const DEPLOYMENT_ID = import.meta.env['VITE_DEPLOYMENT_ID'] ?? 'jira-cloud-dev';
-
-type Connection = 'connecting' | 'live' | 'down';
 
 /**
  * The language is decided before anything is rendered, because Jira's own account locale is one
@@ -32,13 +31,31 @@ export function App() {
   }
   return (
     <TranslationProvider jiraLocale={identity?.jiraLocale ?? null}>
-      <CreateIssuePage jiraLocale={identity?.jiraLocale ?? null} />
+      <Chrome connection={identity ? 'live' : 'down'}>
+        {ticketRefInPath() ? (
+          <TicketView ticketRef={ticketRefInPath()!} />
+        ) : (
+          <CreateIssuePage jiraLocale={identity?.jiraLocale ?? null} />
+        )}
+      </Chrome>
     </TranslationProvider>
   );
 }
 
+/**
+ * Two pages, so two routes — and no router.
+ *
+ * <p>A routing library earns its place when there are routes to nest, params to parse and
+ * navigation to intercept. There are none of those here, and the whole of it is one regular
+ * expression.
+ */
+function ticketRefInPath(): string | null {
+  const match = /^\/t\/([A-Za-z0-9-]{1,64})\/?$/.exec(window.location.pathname);
+  return match ? match[1]! : null;
+}
+
 function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
-  const { t, language, setLanguage } = useT();
+  const { t, language } = useT();
 
   // Jira returns field names in the language of the account jvault authenticates as, and ignores
   // Accept-Language on the createmeta endpoints. Reading German chrome around English field
@@ -46,7 +63,6 @@ function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
   const labelLanguage = pickLanguage(null, jiraLocale, []);
   const labelsDiffer = labelLanguage !== language;
   const [projects, setProjects] = useState<Project[]>([]);
-  const [connection, setConnection] = useState<Connection>('connecting');
   const [projectKey, setProjectKey] = useState('');
   const [issueTypes, setIssueTypes] = useState<IssueType[]>([]);
   const [issueTypeId, setIssueTypeId] = useState('');
@@ -59,17 +75,13 @@ function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
       .projects()
       .then((found) => {
         setProjects(found);
-        setConnection('live');
         // One project is the common case in practice, and making someone choose from a list of
         // one is a step that exists only to be completed.
         if (found.length === 1 && found[0]) {
           setProjectKey(found[0].key);
         }
       })
-      .catch((cause) => {
-        setConnection('down');
-        report(cause, setError, t.errorUnreachable);
-      });
+      .catch((cause) => report(cause, setError, t.errorUnreachable));
     // The strings are read at the moment of failure; re-running this on a language change would
     // mean re-querying Jira to re-word an error.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,35 +110,8 @@ function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
   }, [projectKey, issueTypeId]);
 
   return (
-    <>
-      <header className="topbar">
-        <span className="topbar__mark" aria-hidden="true">
-          jv
-        </span>
-        <span className="topbar__name">jvault</span>
-        <span className="topbar__status">
-          <span
-            className={`dot dot--${
-              connection === 'live' ? 'live' : connection === 'down' ? 'down' : ''
-            }`}
-          />
-          {connection === 'live' ? t.connected : connection === 'down' ? t.unreachable : t.connecting}
-        </span>
-
-        <label className="topbar__lang" title={t.languageNote}>
-          <span className="visually-hidden">{t.language}</span>
-          <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
-            {Object.entries(LANGUAGES).map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </header>
-
-      <main>
-        <h1 className="page-title">{t.createIssue}</h1>
+    <main>
+      <h1 className="page-title">{t.createIssue}</h1>
         <p className="page-sub">
           {t.tagline}
           {labelsDiffer ? <> {t.labelsFrom(LANGUAGES[labelLanguage])}</> : null}
@@ -197,7 +182,51 @@ function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
             </div>
           )}
         </div>
-      </main>
+    </main>
+  );
+}
+
+/**
+ * The bar across the top: who we are talking to, and in which language.
+ *
+ * <p>Shared by both pages, because a ticket view reached from a Jira issue is often somebody's
+ * first sight of jvault, and arriving at an unlabelled page of field names explains nothing.
+ */
+function Chrome({
+  connection,
+  children,
+}: {
+  connection: 'live' | 'down';
+  children: React.ReactNode;
+}) {
+  const { t, language, setLanguage } = useT();
+
+  return (
+    <>
+      <header className="topbar">
+        <a className="topbar__brand" href="/">
+          <span className="topbar__mark" aria-hidden="true">
+            jv
+          </span>
+          <span className="topbar__name">jvault</span>
+        </a>
+        <span className="topbar__status">
+          <span className={`dot dot--${connection === 'live' ? 'live' : 'down'}`} />
+          {connection === 'live' ? t.connected : t.unreachable}
+        </span>
+
+        <label className="topbar__lang" title={t.languageNote}>
+          <span className="visually-hidden">{t.language}</span>
+          <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
+            {Object.entries(LANGUAGES).map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </header>
+      {children}
     </>
   );
 }

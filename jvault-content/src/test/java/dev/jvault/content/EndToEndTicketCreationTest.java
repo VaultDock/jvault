@@ -143,9 +143,11 @@ class EndToEndTicketCreationTest {
             // No separate property effect: jvault.origin rides with the create, which is
             // verified to work and closes the window where the create lands and the follow-up
             // property write does not (docs/00-verified-capabilities.md 0.9).
+            // One link for the ticket, not one per part: somebody reading the issue wants
+            // "show me what is missing from this", and four secured fields would otherwise put
+            // four indistinguishable links on it.
             assertThat(result.effects()).extracting(OutboxEntry::effectKey)
-                    .containsExactly("create-issue",
-                            "remote-link:" + result.storedParts().get(0).contentRef());
+                    .containsExactly("create-issue", "remote-link:ticket");
             assertThat(result.effects()).extracting(OutboxEntry::operation)
                     .containsExactly(JiraOperation.CREATE_ISSUE, JiraOperation.UPSERT_REMOTE_LINK);
         }
@@ -244,7 +246,7 @@ class EndToEndTicketCreationTest {
         @DisplayName("a remote link is idempotent by globalId")
         void remoteLinkCarriesGlobalId() {
             TicketCreationService.Result result = creation.create(incidentCommand());
-            String contentRef = result.storedParts().get(0).contentRef();
+            String ticketRef = result.ticket().ticketRef();
 
             var sent = new ArrayList<JiraSafePayload>();
             OutboxDispatcher dispatcher = dispatcher(payload -> {
@@ -257,7 +259,14 @@ class EndToEndTicketCreationTest {
                     .filter(p -> p.operation() == JiraOperation.UPSERT_REMOTE_LINK)
                     .findFirst().orElseThrow();
 
-            assertThat(link.textFields().get("globalId")).isEqualTo("jvault:content:" + contentRef);
+            // Jira upserts on globalId, so a replayed effect updates the link rather than
+            // adding a second one.
+            assertThat(link.textFields().get("globalId")).isEqualTo("jvault:ticket:" + ticketRef);
+            assertThat(link.textFields().get("url")).endsWith("/t/" + ticketRef);
+            assertThat(link.textFields().get("title")).isEqualTo("Secured content in jvault");
+            // A link title is visible to anyone who can see the issue, which is a wider audience
+            // than the content's: counts, never field names.
+            assertThat(link.textFields().get("summary")).doesNotContain("description");
         }
 
         @Test
