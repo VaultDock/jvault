@@ -152,7 +152,8 @@ public final class TicketAmendmentService {
                 laneFor(ticket), JiraOperation.UPSERT_REMOTE_LINK,
                 "remote-link:" + stored.contentRef(),
                 Map.of("contentRef", stored.contentRef(),
-                        "globalId", "jvault:content:" + stored.contentRef()),
+                        "globalId", "jvault:content:" + stored.contentRef(),
+                        "url", links.linkTo(stored.contentRef())),
                 identityOf(ticket), clock.instant()));
     }
 

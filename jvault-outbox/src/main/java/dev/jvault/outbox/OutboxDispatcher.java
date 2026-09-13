@@ -92,8 +92,19 @@ public final class OutboxDispatcher {
     }
 
     private void processLane(List<OutboxEntry> entries, DispatchReport.Builder report) {
+        // Populated when a create in this lane succeeds. Effects enqueued before the issue
+        // existed carry the pending lane, and from that moment they belong to the issue's lane.
+        // Without this the next effect in the very same pass targets a null issue id.
+        var resolvedLane = new java.util.HashMap<String, String>();
+
         for (int i = 0; i < entries.size(); i++) {
-            if (dispatch(entries.get(i), report) == LaneProgress.STOP) {
+            OutboxEntry entry = entries.get(i);
+            String lane = resolvedLane.get(entry.ticketRef());
+            if (lane != null && !lane.equals(entry.issueLane())) {
+                entry = entry.withIssueLane(lane);
+                entries.set(i, entry);
+            }
+            if (dispatch(entry, report, resolvedLane) == LaneProgress.STOP) {
                 // Return the rest of the lane to the queue, in their original order.
                 releaseRemaining(entries, i + 1, report);
                 return;
@@ -109,7 +120,9 @@ public final class OutboxDispatcher {
         }
     }
 
-    private LaneProgress dispatch(OutboxEntry entry, DispatchReport.Builder report) {
+    private LaneProgress dispatch(OutboxEntry entry,
+                                  DispatchReport.Builder report,
+                                  java.util.Map<String, String> resolvedLane) {
         Instant now = clock.instant();
 
         Optional<Duration> wait = rateLimiter.timeUntilPermitted(entry.issueLane(), now);
@@ -152,12 +165,13 @@ public final class OutboxDispatcher {
         rateLimiter.record(entry.issueLane(), now);
 
         JiraWriteGateway.JiraWriteResult result = gateway.execute(payload);
-        return record(inFlight, result, report);
+        return record(inFlight, result, report, resolvedLane);
     }
 
     private LaneProgress record(OutboxEntry entry,
                                 JiraWriteGateway.JiraWriteResult result,
-                                DispatchReport.Builder report) {
+                                DispatchReport.Builder report,
+                                java.util.Map<String, String> resolvedLane) {
         Instant now = clock.instant();
 
         return switch (result.outcome()) {
@@ -166,6 +180,14 @@ public final class OutboxDispatcher {
                 if (entry.operation() == JiraOperation.CREATE_ISSUE) {
                     ticketStates.ticketBecameActive(
                             entry.ticketRef(), result.issueId(), result.issueKey(), now);
+                    if (result.issueId() != null) {
+                        // Everything else for this ticket now serialises on the issue, which is
+                        // both the correct per-issue rate-limit bucket and how the gateway knows
+                        // what to target.
+                        String issueLane = "issue:" + result.issueId();
+                        resolvedLane.put(entry.ticketRef(), issueLane);
+                        repository.moveToLane(entry.ticketRef(), issueLane);
+                    }
                 }
                 report.add(entry, DispatchReport.Disposition.SENT, null);
                 yield LaneProgress.CONTINUE;

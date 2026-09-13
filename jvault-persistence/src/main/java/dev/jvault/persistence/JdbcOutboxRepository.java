@@ -161,6 +161,16 @@ public final class JdbcOutboxRepository implements OutboxRepository {
         return jdbc.update(RELEASE_STALE_CLAIMS, Timestamp.from(claimedBefore));
     }
 
+    @Override
+    public int moveToLane(String ticketRef, String newLane) {
+        // Terminal rows keep the lane they were dispatched on, because that is what actually
+        // happened; only work still to come moves.
+        return jdbc.update("UPDATE jira_outbox SET issue_lane = ?"
+                + " WHERE ticket_ref = ? AND state NOT IN ('SUCCEEDED', 'ABANDONED')"
+                + " AND issue_lane <> ?",
+                newLane, ticketRef, newLane);
+    }
+
     public SqlDialect dialect() {
         return dialect;
     }

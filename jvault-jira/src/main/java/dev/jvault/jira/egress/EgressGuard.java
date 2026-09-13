@@ -68,7 +68,13 @@ public final class EgressGuard {
 
         var advisoryDetections = new LinkedHashMap<String, List<ContentClassifier.Detection>>();
 
-        for (Map.Entry<String, String> entry : request.textFields().entrySet()) {
+        // Properties are outbound strings too. A bug that put content in jvault.origin would be
+        // no less a leak for being in a property rather than a field, so they go through the
+        // same checks under a distinguishable key.
+        var inspected = new LinkedHashMap<>(request.textFields());
+        request.properties().forEach((key, json) -> inspected.put("property:" + key, json));
+
+        for (Map.Entry<String, String> entry : inspected.entrySet()) {
             String fieldKey = entry.getKey();
             String value = entry.getValue();
             if (value == null) {
@@ -121,6 +127,8 @@ public final class EgressGuard {
                 request.ticketRef(),
                 request.issueLane(),
                 request.textFields(),
+                request.encodings(),
+                request.properties(),
                 checks);
     }
 

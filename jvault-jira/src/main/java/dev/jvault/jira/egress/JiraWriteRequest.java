@@ -2,6 +2,7 @@ package dev.jvault.jira.egress;
 
 import dev.jvault.domain.common.Classification;
 import dev.jvault.domain.common.SensitiveValue;
+import dev.jvault.jira.egress.JiraFieldEncoding;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,6 +27,12 @@ import java.util.Objects;
  * @param externalValues values of this ticket's externally-placed parts. Supplied so the guard
  *                       can prove none of them appear in {@code textFields}; they are never
  *                       sent anywhere
+ * @param encodings      how each field's string becomes JSON. Absent means {@code STRING}
+ * @param properties     Jira issue properties to set, as property key to JSON text. Written in
+ *                       the same request that creates the issue — verified to work
+ *                       (docs/00-verified-capabilities.md 0.9) — which closes the window where a
+ *                       create succeeds and its follow-up property write does not. These are
+ *                       guarded like any other outbound value
  */
 public record JiraWriteRequest(
         JiraOperation operation,
@@ -33,7 +40,9 @@ public record JiraWriteRequest(
         String issueLane,
         Classification classification,
         Map<String, String> textFields,
-        List<SensitiveValue> externalValues) {
+        List<SensitiveValue> externalValues,
+        Map<String, JiraFieldEncoding> encodings,
+        Map<String, String> properties) {
 
     public JiraWriteRequest {
         Objects.requireNonNull(operation, "operation");
@@ -42,6 +51,12 @@ public record JiraWriteRequest(
         Objects.requireNonNull(classification, "classification");
         textFields = textFields == null ? Map.of() : Map.copyOf(textFields);
         externalValues = externalValues == null ? List.of() : List.copyOf(externalValues);
+        encodings = encodings == null ? Map.of() : Map.copyOf(encodings);
+        properties = properties == null ? Map.of() : Map.copyOf(properties);
+    }
+
+    public JiraFieldEncoding encodingOf(String fieldKey) {
+        return encodings.getOrDefault(fieldKey, JiraFieldEncoding.STRING);
     }
 
     public static Builder builder(JiraOperation operation, String ticketRef) {
@@ -55,6 +70,8 @@ public record JiraWriteRequest(
         private Classification classification = Classification.INTERNAL;
         private final Map<String, String> textFields = new LinkedHashMap<>();
         private final List<SensitiveValue> externalValues = new java.util.ArrayList<>();
+        private final Map<String, JiraFieldEncoding> encodings = new LinkedHashMap<>();
+        private final Map<String, String> properties = new LinkedHashMap<>();
 
         private Builder(JiraOperation operation, String ticketRef) {
             this.operation = operation;
@@ -65,12 +82,21 @@ public record JiraWriteRequest(
         public Builder issueLane(String v) { this.issueLane = v; return this; }
         public Builder classification(Classification v) { this.classification = v; return this; }
         public Builder field(String key, String value) { this.textFields.put(key, value); return this; }
+
+        public Builder field(String key, String value, JiraFieldEncoding encoding) {
+            this.textFields.put(key, value);
+            this.encodings.put(key, encoding);
+            return this;
+        }
+
+        /** @param json the property value, already serialised. Identifiers only. */
+        public Builder property(String key, String json) { this.properties.put(key, json); return this; }
         public Builder externalValue(SensitiveValue v) { this.externalValues.add(v); return this; }
         public Builder externalValues(List<SensitiveValue> v) { this.externalValues.addAll(v); return this; }
 
         public JiraWriteRequest build() {
             return new JiraWriteRequest(operation, ticketRef, issueLane, classification,
-                    textFields, externalValues);
+                    textFields, externalValues, encodings, properties);
         }
     }
 }

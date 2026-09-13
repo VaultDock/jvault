@@ -159,6 +159,12 @@ public final class TicketCreationService {
         // The create carries what the ambiguity protocol will need if its outcome is ever
         // unknown: the project to search, the correlation id to match, and the summary to fall
         // back on (docs/12-reliability.md 12.4.2).
+        //
+        // There is deliberately no separate SET_PROPERTY effect. Writing jvault.origin in the
+        // same request that creates the issue is verified to work
+        // (docs/00-verified-capabilities.md 0.9), and doing so closes the window where a create
+        // succeeds and its follow-up property write does not — the gap that forces the ambiguity
+        // protocol onto its weaker summary-matching path.
         var createRef = new LinkedHashMap<String, String>();
         createRef.put("projectKey", ticket.projectKey());
         createRef.put("issueTypeId", ticket.issueTypeId());
@@ -173,12 +179,6 @@ public final class TicketCreationService {
                 lane, JiraOperation.CREATE_ISSUE, "create-issue", createRef, identity,
                 clock.instant())));
 
-        effects.add(outbox.append(OutboxEntry.pending(ticket.ticketRef(), command.deploymentId(),
-                lane, JiraOperation.SET_PROPERTY, "prop:jvault.origin",
-                Map.of("ticketRef", ticket.ticketRef(),
-                        "correlationId", String.valueOf(ticket.correlationId())),
-                identity, clock.instant())));
-
         for (ContentRecord part : storedParts) {
             ResolvedPlacement placement = resolve(command, part.fieldKey());
             if (!placement.linkPlacements().contains(LinkPlacement.REMOTE_LINK)) {
@@ -190,7 +190,8 @@ public final class TicketCreationService {
                     command.deploymentId(), lane, JiraOperation.UPSERT_REMOTE_LINK,
                     "remote-link:" + part.contentRef(),
                     Map.of("contentRef", part.contentRef(),
-                            "globalId", "jvault:content:" + part.contentRef()),
+                            "globalId", "jvault:content:" + part.contentRef(),
+                            "url", links.linkTo(part.contentRef())),
                     identity, clock.instant())));
         }
         return effects;

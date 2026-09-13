@@ -140,12 +140,14 @@ class EndToEndTicketCreationTest {
         void enqueuesTheRightEffects() {
             TicketCreationService.Result result = creation.create(incidentCommand());
 
+            // No separate property effect: jvault.origin rides with the create, which is
+            // verified to work and closes the window where the create lands and the follow-up
+            // property write does not (docs/00-verified-capabilities.md 0.9).
             assertThat(result.effects()).extracting(OutboxEntry::effectKey)
-                    .containsExactly("create-issue", "prop:jvault.origin",
+                    .containsExactly("create-issue",
                             "remote-link:" + result.storedParts().get(0).contentRef());
             assertThat(result.effects()).extracting(OutboxEntry::operation)
-                    .containsExactly(JiraOperation.CREATE_ISSUE, JiraOperation.SET_PROPERTY,
-                            JiraOperation.UPSERT_REMOTE_LINK);
+                    .containsExactly(JiraOperation.CREATE_ISSUE, JiraOperation.UPSERT_REMOTE_LINK);
         }
 
         @Test
@@ -218,6 +220,27 @@ class EndToEndTicketCreationTest {
         }
 
         @Test
+        @DisplayName("the create carries jvault.origin, so no follow-up write can be lost")
+        void createCarriesTheOriginProperty() {
+            creation.create(incidentCommand());
+
+            var sent = new ArrayList<JiraSafePayload>();
+            dispatcher(payload -> {
+                sent.add(payload);
+                return JiraWriteGateway.JiraWriteResult.succeeded("10001", "SEC-4471");
+            }).runOnce(10);
+
+            JiraSafePayload create = sent.stream()
+                    .filter(p -> p.operation() == JiraOperation.CREATE_ISSUE)
+                    .findFirst().orElseThrow();
+
+            assertThat(create.properties()).containsKey("jvault.origin");
+            assertThat(create.properties().get("jvault.origin"))
+                    .contains("corr-8f21c")
+                    .doesNotContain("AWS_SECRET_ACCESS_KEY");
+        }
+
+        @Test
         @DisplayName("a remote link is idempotent by globalId")
         void remoteLinkCarriesGlobalId() {
             TicketCreationService.Result result = creation.create(incidentCommand());
@@ -245,7 +268,7 @@ class EndToEndTicketCreationTest {
             DispatchReport report = dispatcher(payload ->
                     JiraWriteGateway.JiraWriteResult.succeeded("10001", "SEC-4471")).runOnce(10);
 
-            assertThat(report.count(DispatchReport.Disposition.SENT)).isEqualTo(3);
+            assertThat(report.count(DispatchReport.Disposition.SENT)).isEqualTo(2);
         }
     }
 
@@ -264,7 +287,7 @@ class EndToEndTicketCreationTest {
             assertThat(second.storedParts())
                     .as("a replay must not re-encrypt and re-store the content either")
                     .isEmpty();
-            assertThat(outbox.all()).hasSize(3);
+            assertThat(outbox.all()).hasSize(2);
         }
 
         @Test
@@ -275,7 +298,7 @@ class EndToEndTicketCreationTest {
                     commandBuilder().dedupeKey("alert-8f21c|2").build());
 
             assertThat(other.duplicate()).isFalse();
-            assertThat(outbox.all()).hasSize(6);
+            assertThat(outbox.all()).hasSize(4);
         }
     }
 

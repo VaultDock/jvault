@@ -48,4 +48,15 @@ public interface OutboxRepository {
 
     /** Releases entries claimed by a dispatcher that died before sending them. */
     int releaseStaleClaims(Instant claimedBefore);
+
+    /**
+     * Moves every not-yet-terminal effect for a ticket onto a new lane.
+     *
+     * <p>Called once the ticket's Jira issue exists. Until then effects sit on the pending lane
+     * {@code ticket:<ref>}; afterwards they must serialise on the issue, which is both the correct
+     * per-issue rate-limit bucket and how the gateway knows what to target.
+     *
+     * @return how many entries were moved
+     */
+    int moveToLane(String ticketRef, String newLane);
 }

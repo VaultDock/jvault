@@ -3,6 +3,7 @@ package dev.jvault.content;
 import dev.jvault.domain.common.Classification;
 import dev.jvault.domain.common.SensitiveValue;
 import dev.jvault.jira.egress.JiraWriteRequest;
+import dev.jvault.jira.egress.JiraFieldEncoding;
 import dev.jvault.outbox.JiraPayloadAssembler;
 import dev.jvault.outbox.OutboxEntry;
 
@@ -58,13 +59,25 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
                 .classification(classificationOf(ticket));
 
         switch (entry.operation()) {
-            case CREATE_ISSUE, UPDATE_FIELDS -> ticket.jiraFields().forEach(builder::field);
+            case CREATE_ISSUE -> {
+                // Routing information Jira needs but jvault does not store as a field value.
+                builder.field("project", ticket.projectKey(), JiraFieldEncoding.KEY_OBJECT);
+                builder.field("issuetype", ticket.issueTypeId(), JiraFieldEncoding.ID_OBJECT);
+                ticket.jiraFields().forEach((key, value) ->
+                        builder.field(key, value, encodingFor(key)));
+                builder.property("jvault.origin", originJson(ticket));
+            }
+            case UPDATE_FIELDS -> ticket.jiraFields().forEach((key, value) ->
+                    builder.field(key, value, encodingFor(key)));
             case UPSERT_REMOTE_LINK -> {
                 String contentRef = entry.payloadRef().get("contentRef");
                 ContentRecord part = metadata.findCurrent(contentRef)
                         .orElseThrow(() -> new EffectNoLongerApplicable("PART_DELETED"));
+                // Jira upserts on globalId, so replaying this effect updates rather than
+                // duplicates (verified: docs/00-verified-capabilities.md 0.6).
                 builder.field("globalId", "jvault:content:" + part.contentRef());
                 builder.field("title", titleFor(part));
+                builder.field("url", entry.payloadRef().getOrDefault("url", ""));
             }
             case ADD_COMMENT, EDIT_COMMENT -> {
                 CommentRecord comment = comments.find(entry.payloadRef().get("commentRef"))
@@ -106,6 +119,41 @@ public final class TicketPayloadAssembler implements JiraPayloadAssembler {
             // than being swallowed silently.
             return java.util.Optional.empty();
         }
+    }
+
+    /**
+     * How a field's stored string becomes JSON.
+     *
+     * <p>A deliberately small table for now. The complete answer comes from create metadata —
+     * which knows that a given custom field is a select rather than a string — and arrives with
+     * the dynamic form. Until then anything unrecognised is sent as a string, which produces a
+     * field-level error from Jira naming the field rather than a silent mis-encoding.
+     */
+    private static JiraFieldEncoding encodingFor(String fieldKey) {
+        return switch (fieldKey) {
+            case "description", "environment" -> JiraFieldEncoding.RICH_TEXT;
+            case "labels" -> JiraFieldEncoding.STRING_ARRAY;
+            case "priority" -> JiraFieldEncoding.ID_OBJECT;
+            case "assignee", "reporter" -> JiraFieldEncoding.ACCOUNT_OBJECT;
+            default -> JiraFieldEncoding.STRING;
+        };
+    }
+
+    /**
+     * The origin property: who really caused this ticket, and the correlation id that lets the
+     * ambiguity protocol recognise the issue if the create's outcome is ever unknown.
+     *
+     * <p>Identifiers only, and bounded well inside Jira's 32 KB property limit.
+     */
+    private static String originJson(TicketRecord ticket) {
+        var origin = new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode();
+        origin.put("ticketRef", ticket.ticketRef());
+        origin.put("correlationId", ticket.correlationId());
+        if (ticket.origin() != null) {
+            origin.put("channel", ticket.origin().channel().name());
+            origin.put("actorId", ticket.origin().actorId());
+        }
+        return origin.toString();
     }
 
     private static String titleFor(ContentRecord part) {

@@ -64,6 +64,20 @@ public record OutboxEntry(
                 effectKey, payloadRef, identityRef, OutboxState.PENDING, 0, now, null, null, now);
     }
 
+    /**
+     * Moves this entry to a different serialisation lane.
+     *
+     * <p>Used when a ticket's issue comes into existence: effects enqueued before the create
+     * succeeded carry the pending lane {@code ticket:<ref>}, and from that moment on they belong
+     * to {@code issue:<id>} — which is both the correct rate-limit bucket and the only way the
+     * gateway can tell which issue to target.
+     */
+    public OutboxEntry withIssueLane(String newLane) {
+        return new OutboxEntry(id, ticketRef, deploymentId, newLane, operation, effectKey,
+                payloadRef, identityRef, state, attempts, nextAttemptAt, lastErrorCode,
+                attemptStartedAt, createdAt);
+    }
+
     public OutboxEntry withState(OutboxState newState) {
         return new OutboxEntry(id, ticketRef, deploymentId, issueLane, operation, effectKey,
                 payloadRef, identityRef, newState, attempts, nextAttemptAt, lastErrorCode,

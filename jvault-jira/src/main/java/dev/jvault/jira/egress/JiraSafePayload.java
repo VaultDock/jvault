@@ -1,5 +1,7 @@
 package dev.jvault.jira.egress;
 
+import dev.jvault.jira.egress.JiraFieldEncoding;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -23,18 +25,39 @@ public final class JiraSafePayload {
     private final String ticketRef;
     private final String issueLane;
     private final Map<String, String> textFields;
+    private final Map<String, JiraFieldEncoding> encodings;
+    private final Map<String, String> properties;
     private final List<String> checksPerformed;
 
     JiraSafePayload(JiraOperation operation,
                     String ticketRef,
                     String issueLane,
                     Map<String, String> textFields,
+                    Map<String, JiraFieldEncoding> encodings,
+                    Map<String, String> properties,
                     List<String> checksPerformed) {
         this.operation = Objects.requireNonNull(operation, "operation");
         this.ticketRef = Objects.requireNonNull(ticketRef, "ticketRef");
         this.issueLane = Objects.requireNonNull(issueLane, "issueLane");
         this.textFields = Map.copyOf(textFields);
+        this.encodings = Map.copyOf(encodings);
+        this.properties = Map.copyOf(properties);
         this.checksPerformed = List.copyOf(checksPerformed);
+    }
+
+    /** How each field's value becomes JSON. Absent means a plain string. */
+    public JiraFieldEncoding encodingOf(String fieldKey) {
+        return encodings.getOrDefault(fieldKey, JiraFieldEncoding.STRING);
+    }
+
+    /**
+     * Issue properties to write with this operation, as property key to JSON text.
+     *
+     * <p>Checked by the guard exactly like a field value, because they are outbound strings and
+     * a bug that put content in a property would be no less a leak for being in a property.
+     */
+    public Map<String, String> properties() {
+        return properties;
     }
 
     public JiraOperation operation() {

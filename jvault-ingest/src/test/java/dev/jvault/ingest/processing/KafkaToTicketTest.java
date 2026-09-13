@@ -173,7 +173,8 @@ class KafkaToTicketTest {
             assertThat(second.state()).isEqualTo(MessageState.DUPLICATE);
             assertThat(second.ticketRef()).isEqualTo(first.ticketRef());
             assertThat(tickets.find(first.ticketRef())).isPresent();
-            assertThat(outbox.all()).hasSize(3);
+            // create + one remote link; jvault.origin now rides with the create.
+            assertThat(outbox.all()).hasSize(2);
         }
 
         @Test
@@ -185,7 +186,7 @@ class KafkaToTicketTest {
                     message(1, VALID_EVENT.replace("\"revision\": 1", "\"revision\": 2")));
 
             assertThat(second.state()).isEqualTo(MessageState.COMPLETE);
-            assertThat(outbox.all()).hasSize(6);
+            assertThat(outbox.all()).hasSize(4);
         }
     }
 

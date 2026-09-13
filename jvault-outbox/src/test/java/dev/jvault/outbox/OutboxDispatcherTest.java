@@ -105,6 +105,40 @@ class OutboxDispatcherTest {
         }
 
         @Test
+        @DisplayName("once the issue exists, the rest of the lane follows it")
+        void effectsMoveToTheIssueLaneAfterCreate() {
+            enqueue(JiraOperation.CREATE_ISSUE, "create-issue", OutboxEntry.pendingLaneFor(TICKET));
+            clock.advance(Duration.ofMillis(1));
+            enqueue(JiraOperation.UPSERT_REMOTE_LINK, "remote-link:c1",
+                    OutboxEntry.pendingLaneFor(TICKET));
+            gateway.fallback(JiraWriteResult.succeeded("10001", "SEC-4471"));
+
+            dispatcher.runOnce(10);
+
+            // Both effects are enqueued before the issue exists, so both carry the pending lane.
+            // The moment the create returns an id the rest of the lane has to follow it —
+            // otherwise the very next effect in the same pass targets a null issue, which is a
+            // 404 from Jira and an abandoned effect. A live run is what found this.
+            assertThat(entry("remote-link:c1").issueLane()).isEqualTo("issue:10001");
+            assertThat(gateway.sendCount()).isEqualTo(2);
+            assertThat(entry("remote-link:c1").state()).isEqualTo(OutboxState.SUCCEEDED);
+        }
+
+        @Test
+        @DisplayName("effects enqueued later are moved too, not just the ones in flight")
+        void laneMoveIsDurable() {
+            enqueue(JiraOperation.CREATE_ISSUE, "create-issue", OutboxEntry.pendingLaneFor(TICKET));
+            clock.advance(Duration.ofMillis(1));
+            enqueue(JiraOperation.ADD_COMMENT, "comment:p1:v1", OutboxEntry.pendingLaneFor(TICKET));
+            gateway.fallback(JiraWriteResult.succeeded("10001", "SEC-4471"));
+
+            dispatcher.runOnce(1);   // only the create is claimed in this pass
+
+            // The move is persisted, so a later pass — or another node — sees the right lane.
+            assertThat(entry("comment:p1:v1").issueLane()).isEqualTo("issue:10001");
+        }
+
+        @Test
         @DisplayName("a stalled lane does not stall a different issue")
         void lanesAreIndependent() {
             enqueue(JiraOperation.CREATE_ISSUE, "create-issue", "issue:10001");

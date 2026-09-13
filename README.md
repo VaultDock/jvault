@@ -67,7 +67,7 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 364 tests green, 5 skipped.
+Java 21, Maven multi-module. `mvn test` — 379 tests green, 6 skipped.
 
 > **There is no user interface yet.** Everything built so far is backend. The React SPA is
 > still unstarted, and its first dependency is the ADF-editor spike in
@@ -85,7 +85,7 @@ Java 21, Maven multi-module. `mvn test` — 364 tests green, 5 skipped.
 | Module | Contains | State |
 |---|---|---|
 | `jvault-domain` | Placement policy engine, `SensitiveValue`, surrogate rendering | **Done for MVP scope** |
-| `jvault-jira` | Egress guard, `JiraSafePayload`, deployment abstraction, HTTP client, response classifier | **Boundary, transport and classification done**; request-body mapping not started |
+| `jvault-jira` | Egress guard, `JiraSafePayload`, deployment abstraction, HTTP client, classifier, request mapping, write gateway | **Transport complete and exercised against a live Jira Cloud site** |
 | `jvault-outbox` | Outbox, per-issue dispatcher lanes, backoff, rate limiting, ambiguity protocol | **Done for MVP scope**; PostgreSQL adapter not started |
 | `jvault-crypto` | Envelope encryption, KMS port, self-describing object header, key rotation | **Done for MVP scope**; Vault Transit and PKCS#11 adapters not started |
 | `jvault-storage` | `ContentStore` SPI, capability negotiation, filesystem backend | **Filesystem done**; CMIS and S3 not started |
@@ -138,6 +138,7 @@ and none of them depends on the unanswered Q0 connectivity question.
 | A dead-letter record cannot carry a payload | `DeadLetterRecord` has no payload field and `DeadLetterPublisher` has no overload accepting one, so the "just include the message for debugging" shortcut requires changing an interface — a conversation rather than an accident. The original goes to the encrypted quarantine and is referenced by id |
 | Mapping configuration is not executable | A closed set of four value sources and a restricted path syntax, with no scripting engine. Administrator-authored configuration stored in a database cannot become a code-execution surface |
 | Two kinds of duplicate are distinguished | The offset check catches redelivery after a crash or rebalance; the business-key check catches republication on a new offset. A system with only one of them either duplicates tickets on replay or redoes work on every rebalance |
+| The transport works against a real Jira | `LiveJiraSmokeTest` drives the whole stack — policy, encryption, storage, outbox, gateway — against a real site when `JIRA_SITE`/`JIRA_EMAIL`/`JIRA_TOKEN` are set, creates one issue, asserts Jira holds only a surrogate and a link, and deletes it again. Skipped otherwise, so an ordinary build touches nobody's instance |
 | Ambiguity stays rare | `JiraOperation.isIdempotent()` decides what an unknown outcome means. A timed-out remote-link upsert or property `PUT` is merely retryable; only a create, comment or attachment is genuinely ambiguous, so the recovery protocol is reserved for the cases that need it |
 | A request that never left is not ambiguous | The HTTP client distinguishes a connection that was never established from a response that never arrived, and only the latter can have taken effect |
 | Deployments admit what they cannot do | `JiraDeployment.Capabilities` records section-splitting, PKCE, property search and rate limits per deployment, so configuration validation refuses a policy the target cannot honour |

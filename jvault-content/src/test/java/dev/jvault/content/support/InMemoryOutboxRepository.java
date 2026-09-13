@@ -77,6 +77,17 @@ public final class InMemoryOutboxRepository implements OutboxRepository {
         return stale.size();
     }
 
+    @Override
+    public synchronized int moveToLane(String ticketRef, String newLane) {
+        var moved = entries.values().stream()
+                .filter(e -> e.ticketRef().equals(ticketRef))
+                .filter(e -> !e.state().isTerminal())
+                .filter(e -> !newLane.equals(e.issueLane()))
+                .toList();
+        moved.forEach(e -> entries.put(e.id(), e.withIssueLane(newLane)));
+        return moved.size();
+    }
+
     public synchronized List<OutboxEntry> all() {
         return List.copyOf(entries.values());
     }
