@@ -29,6 +29,7 @@ import dev.jvault.domain.placement.PlacementPolicy;
 import dev.jvault.domain.placement.PolicySelector;
 import dev.jvault.domain.placement.PolicySet;
 import dev.jvault.domain.placement.SurrogateSpec;
+import dev.jvault.jira.gateway.UserDirectory;
 import dev.jvault.storage.filesystem.FilesystemContentStore;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,6 +46,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -105,8 +107,8 @@ class TicketControllerTest {
         var authorization = new ContentAuthorizationService(
                 acl(), jiraChecker(), spaceSettings(), clock);
 
-        var controller = new TicketController(creation, tickets, metadata, authorization,
-                callerResolver(),
+        var controller = new TicketController(creation, tickets, metadata, directory(),
+                authorization, callerResolver(),
                 new IdempotencyService(new InMemoryIdempotencyStore(), clock), links);
 
         mvc = MockMvcBuilders.standaloneSetup(controller)
@@ -431,6 +433,24 @@ class TicketControllerTest {
             public Duration degradedGrace(String spaceId) {
                 return Duration.ZERO;
             }
+        };
+    }
+
+    /**
+     * A directory that knows one person, and nothing about the rest.
+     *
+     * <p>Both halves are under test: an id it recognises comes back as a name, and one it does
+     * not is simply absent, which is what a deactivated account looks like.
+     */
+    private UserDirectory directory() {
+        return accountIds -> {
+            var names = new LinkedHashMap<String, String>();
+            for (String id : accountIds) {
+                if ("5b10a2".equals(id)) {
+                    names.put(id, "Ada Lovelace");
+                }
+            }
+            return names;
         };
     }
 

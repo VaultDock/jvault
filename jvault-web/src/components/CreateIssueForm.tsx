@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { FormDefinition, FormField, TicketResponse } from '../api/types';
-import { useT } from '../i18n';
+import { useJiraIssueUrl, useT } from '../i18n';
 import { AttachmentField, type PendingFile } from './AttachmentField';
 import { FieldControl } from './FieldControl';
 import { AlertIcon, CheckIcon, VaultIcon } from './icons';
@@ -213,6 +213,20 @@ export function CreateIssueForm({
   );
 }
 
+/** The way back to Jira, once there is an issue to go back to. */
+function JiraLink({ issueKey }: { issueKey: string | null }) {
+  const { t } = useT();
+  const url = useJiraIssueUrl(issueKey);
+  if (!url) {
+    return null;
+  }
+  return (
+    <a className="result__jira" href={url} target="_blank" rel="noreferrer noopener">
+      {t.openInJira}
+    </a>
+  );
+}
+
 /** Only fields the user actually filled in; an empty string is not an instruction to clear. */
 function filled(fields: FormField[], values: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {};
@@ -267,6 +281,7 @@ function CreatedTicket({
         {/* The number, as large as the word. It is what somebody came here to be told. */}
         <h2>{settled.issueKey ?? (settled.state === 'FAILED' ? t.notInJira : t.created)}</h2>
         {settled.issueKey ? <span className="result__sub">{t.created}</span> : null}
+        <JiraLink issueKey={settled.issueKey} />
       </div>
 
       {!settled.issueKey && settled.state !== 'FAILED' ? (

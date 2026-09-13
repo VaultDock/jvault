@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { TicketResponse } from '../api/types';
-import { useT } from '../i18n';
+import { useJiraIssueUrl, useT } from '../i18n';
 import { AlertIcon, CheckIcon, LockIcon } from './icons';
 import { SecuredPart } from './SecuredPart';
 
@@ -16,6 +16,42 @@ import { SecuredPart } from './SecuredPart';
  * separately and audited separately — so opening the page is not the same act as reading a
  * field, and the audit trail can tell them apart.
  */
+/**
+ * Field keys as somebody would say them.
+ *
+ * <p>Only the system fields, whose keys are the same everywhere. A custom field's label comes
+ * from create metadata and belongs to a project, so guessing one here would be inventing it.
+ */
+const FIELD_LABELS: Record<string, string> = {
+  summary: 'Summary',
+  description: 'Description',
+  assignee: 'Assignee',
+  reporter: 'Reporter',
+  priority: 'Priority',
+  labels: 'Labels',
+  parent: 'Parent',
+  duedate: 'Due date',
+  environment: 'Environment',
+};
+
+function labelFor(field: string): string {
+  return FIELD_LABELS[field] ?? field;
+}
+
+/** The way back. Jira links here; this links there. */
+function JiraLink({ issueKey }: { issueKey: string | null }) {
+  const { t } = useT();
+  const url = useJiraIssueUrl(issueKey);
+  if (!url) {
+    return null;
+  }
+  return (
+    <a className="result__jira" href={url} target="_blank" rel="noreferrer noopener">
+      {t.openInJira}
+    </a>
+  );
+}
+
 export function TicketView({ ticketRef }: { ticketRef: string }) {
   const { t } = useT();
   const [ticket, setTicket] = useState<TicketResponse | null>(null);
@@ -93,6 +129,7 @@ export function TicketView({ ticketRef }: { ticketRef: string }) {
               {ticket.state === 'FAILED' ? <AlertIcon /> : <CheckIcon />}
             </span>
             <h2>{ticket.issueKey ?? (settled ? t.notInJira : t.beingCreated)}</h2>
+            <JiraLink issueKey={ticket.issueKey} />
           </div>
 
           <dl>
@@ -120,8 +157,13 @@ export function TicketView({ ticketRef }: { ticketRef: string }) {
           <dl>
             {Object.entries(ticket.jiraFields).map(([field, value]) => (
               <div key={field} style={{ display: 'contents' }}>
-                <dt>{field}</dt>
-                <dd className="ticketview__value">{value}</dd>
+                <dt>{labelFor(field)}</dt>
+                <dd className="ticketview__value">
+                  {/* The name where there is one. Nobody recognises a colleague as
+                      712020:8e1dc606, and the identifier is what was stored rather than what
+                      anybody meant. */}
+                  {ticket.fieldDisplayNames[value] ?? value}
+                </dd>
               </div>
             ))}
           </dl>

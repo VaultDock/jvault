@@ -76,6 +76,30 @@ export function useT(): Translation {
   return useContext(TranslationContext);
 }
 
+/**
+ * Where this deployment's Jira lives.
+ *
+ * <p>A context rather than a prop threaded through four components: every page that shows an
+ * issue key wants to link to it, and none of them wants to know how the URL is built.
+ */
+const JiraSiteContext = createContext<string | null>(null);
+
+export function JiraSiteProvider({
+  baseUrl,
+  children,
+}: {
+  baseUrl: string | null;
+  children: ReactNode;
+}) {
+  return <JiraSiteContext.Provider value={baseUrl}>{children}</JiraSiteContext.Provider>;
+}
+
+/** The issue's page in Jira, or null when this deployment has not said where Jira is. */
+export function useJiraIssueUrl(issueKey: string | null | undefined): string | null {
+  const baseUrl = useContext(JiraSiteContext);
+  return baseUrl && issueKey ? `${baseUrl}/browse/${encodeURIComponent(issueKey)}` : null;
+}
+
 /** A remembered preference is a convenience, so a browser that refuses storage is not an error. */
 function readStored(): Language | null {
   try {

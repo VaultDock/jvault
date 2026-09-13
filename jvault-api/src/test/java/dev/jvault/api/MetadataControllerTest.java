@@ -21,7 +21,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -52,7 +54,8 @@ class MetadataControllerTest {
         caller.set(new Caller(Principal.user("alice"),
                 Set.of(Principal.group("sec-responders")), true));
 
-        var controller = new MetadataController(fakeJira(), policies(), callerResolver(), DEPLOYMENT);
+        var controller = new MetadataController(fakeJira(), policies(), callerResolver(),
+                DEPLOYMENT, "https://acme.atlassian.net");
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -169,6 +172,9 @@ class MetadataControllerTest {
         assertThat(identity.get("jiraLocale").asText()).isEqualTo("en_GB");
         assertThat(identity.get("user").asText()).isEqualTo("alice");
         assertThat(identity.get("jiraAccount").asText()).isEqualTo("Service Account");
+        // So a client can link back to the issue: Jira carries a link to the vault, and the
+        // vault carries one back.
+        assertThat(identity.get("jiraBaseUrl").asText()).isEqualTo("https://acme.atlassian.net");
     }
 
     @Test
@@ -272,6 +278,11 @@ class MetadataControllerTest {
             @Override
             public CurrentUser currentUser() {
                 return new CurrentUser("712020:abc", "Service Account", "en_GB");
+            }
+
+            @Override
+            public Map<String, String> displayNamesOf(Collection<String> accountIds) {
+                return Map.of("5b10a2", "Ada Lovelace");
             }
 
             @Override

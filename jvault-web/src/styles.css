@@ -963,6 +963,22 @@ button:focus-visible {
   font-weight: 650;
 }
 
+.result__jira {
+  margin-left: auto;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.result__jira:hover {
+  background: var(--surface-sunken);
+}
+
 .result__sub {
   color: var(--text-muted);
   font-size: 0.9rem;

@@ -78,6 +78,8 @@ export interface TicketResponse {
   state: string;
   issueKey: string | null;
   jiraFields: Record<string, string>;
+  /** Readable values for stored identifiers, keyed by the identifier itself. */
+  fieldDisplayNames: Record<string, string>;
   parts: TicketPart[];
 }
 
@@ -103,6 +105,8 @@ export interface Identity {
   jiraAccount: string | null;
   jiraLocale: string | null;
   deployment: string;
+  /** Where this deployment's issues live, so the vault can link back to one. */
+  jiraBaseUrl: string | null;
 }
 
 /** Whether anybody is signed in, and how signing in works here. */

@@ -10,7 +10,7 @@ import java.util.List;
  * boundary of Tier A in the parity scope (docs/02-jira-parity-scope.md), and pretending otherwise
  * would produce a form that looks right and rejects on submit.
  */
-public interface JiraMetadataGateway {
+public interface JiraMetadataGateway extends UserDirectory {
 
     /** Projects the acting identity may create issues in. */
     List<Project> projects();

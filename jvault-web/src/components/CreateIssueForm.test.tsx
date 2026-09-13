@@ -41,6 +41,7 @@ const created = {
   state: 'ACCEPTED',
   issueKey: null,
   jiraFields: {},
+  fieldDisplayNames: {},
   parts: [
     {
       contentRef: 'ct-1',

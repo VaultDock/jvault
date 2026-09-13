@@ -129,6 +129,37 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
     }
 
     @Override
+    public Map<String, String> displayNamesOf(java.util.Collection<String> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return Map.of();
+        }
+
+        var query = new StringBuilder("?maxResults=" + MAX_USERS);
+        for (String accountId : accountIds.stream().distinct().limit(MAX_USERS).toList()) {
+            query.append("&accountId=").append(encode(accountId));
+        }
+
+        JsonNode body;
+        try {
+            body = get("/rest/api/" + deployment.apiVersion() + "/user/bulk" + query);
+        } catch (MetadataUnavailableException e) {
+            // Names are a courtesy. A ticket that cannot be read because Jira is slow to answer
+            // a lookup would be a worse trade than showing the ids.
+            return Map.of();
+        }
+
+        var names = new java.util.LinkedHashMap<String, String>();
+        for (JsonNode user : body.path("values")) {
+            String accountId = user.path("accountId").asText(null);
+            String displayName = user.path("displayName").asText(null);
+            if (accountId != null && displayName != null) {
+                names.put(accountId, displayName);
+            }
+        }
+        return Map.copyOf(names);
+    }
+
+    @Override
     public List<IssueRef> searchIssues(String projectKey, String query, String childIssueTypeId) {
         List<IssueType> types = issueTypes(projectKey);
         String childId = childIssueTypeId == null ? "" : childIssueTypeId;

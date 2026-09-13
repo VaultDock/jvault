@@ -85,6 +85,7 @@ export interface Strings {
   jiraRejected: string;
   ticketView: string;
   openTicketView: string;
+  openInJira: string;
   open: string;
   searchPeople: string;
   searchIssues: string;
@@ -180,6 +181,7 @@ const en: Strings = {
   jiraRejected: 'Jira refused this ticket. Open the ticket view to see what it holds.',
   ticketView: 'Ticket view',
   openTicketView: 'Open',
+  openInJira: 'Open in Jira',
   open: 'open',
   searchPeople: 'Search people…',
   searchIssues: 'Search issues…',
@@ -275,6 +277,7 @@ const de: Strings = {
   jiraRejected: 'Jira hat diesen Vorgang abgelehnt. Öffnen Sie die Ticketansicht, um den Inhalt zu sehen.',
   ticketView: 'Ticketansicht',
   openTicketView: 'Öffnen',
+  openInJira: 'In Jira öffnen',
   open: 'öffnen',
   searchPeople: 'Personen suchen…',
   searchIssues: 'Vorgänge suchen…',
@@ -370,6 +373,7 @@ const fr: Strings = {
   jiraRejected: 'Jira a refusé ce ticket. Ouvrez la vue du ticket pour voir son contenu.',
   ticketView: 'Vue du ticket',
   openTicketView: 'Ouvrir',
+  openInJira: 'Ouvrir dans Jira',
   open: 'ouvrir',
   searchPeople: 'Rechercher des personnes…',
   searchIssues: 'Rechercher des tickets…',
@@ -465,6 +469,7 @@ const es: Strings = {
   jiraRejected: 'Jira rechazó esta incidencia. Abra la vista del ticket para ver su contenido.',
   ticketView: 'Vista del ticket',
   openTicketView: 'Abrir',
+  openInJira: 'Abrir en Jira',
   open: 'abrir',
   searchPeople: 'Buscar personas…',
   searchIssues: 'Buscar incidencias…',
@@ -560,6 +565,7 @@ const it: Strings = {
   jiraRejected: 'Jira ha rifiutato questo ticket. Apri la vista del ticket per vederne il contenuto.',
   ticketView: 'Vista del ticket',
   openTicketView: 'Apri',
+  openInJira: 'Apri in Jira',
   open: 'apri',
   searchPeople: 'Cerca persone…',
   searchIssues: 'Cerca ticket…',
@@ -655,6 +661,7 @@ const nl: Strings = {
   jiraRejected: 'Jira heeft dit ticket geweigerd. Open de ticketweergave om de inhoud te zien.',
   ticketView: 'Ticketweergave',
   openTicketView: 'Openen',
+  openInJira: 'Openen in Jira',
   open: 'openen',
   searchPeople: 'Personen zoeken…',
   searchIssues: 'Tickets zoeken…',
@@ -750,6 +757,7 @@ const pt: Strings = {
   jiraRejected: 'O Jira recusou este ticket. Abra a vista do ticket para ver o conteúdo.',
   ticketView: 'Vista do ticket',
   openTicketView: 'Abrir',
+  openInJira: 'Abrir no Jira',
   open: 'abrir',
   searchPeople: 'Procurar pessoas…',
   searchIssues: 'Procurar tickets…',
@@ -845,6 +853,7 @@ const lb: Strings = {
   jiraRejected: 'De Jira huet dësen Ticket refuséiert. Maacht d’Ticketusiicht op fir ze gesinn, wat dra steet.',
   ticketView: 'Ticketusiicht',
   openTicketView: 'Opmaachen',
+  openInJira: 'Am Jira opmaachen',
   open: 'opmaachen',
   searchPeople: 'Leit sichen…',
   searchIssues: 'Ticketë sichen…',

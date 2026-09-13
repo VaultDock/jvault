@@ -16,9 +16,13 @@ import dev.jvault.content.TicketCreationService;
 import dev.jvault.content.TicketRecord;
 import dev.jvault.content.ContentMetadataRepository;
 import dev.jvault.content.TicketRepository;
+import dev.jvault.jira.egress.JiraFieldEncoding;
+import dev.jvault.jira.gateway.UserDirectory;
 import dev.jvault.domain.placement.Placement;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -54,11 +58,14 @@ import java.util.Optional;
 @RequestMapping("/api/v1/tickets")
 public class TicketController {
 
+    private static final Logger log = LoggerFactory.getLogger(TicketController.class);
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final TicketCreationService creation;
     private final TicketRepository tickets;
     private final ContentMetadataRepository contentMetadata;
+    private final UserDirectory directory;
     private final ContentAuthorizationService authorization;
     private final CallerResolver callers;
     private final IdempotencyService idempotency;
@@ -67,6 +74,7 @@ public class TicketController {
     public TicketController(TicketCreationService creation,
                             TicketRepository tickets,
                             ContentMetadataRepository contentMetadata,
+                            UserDirectory directory,
                             ContentAuthorizationService authorization,
                             CallerResolver callers,
                             IdempotencyService idempotency,
@@ -74,6 +82,7 @@ public class TicketController {
         this.creation = Objects.requireNonNull(creation, "creation");
         this.tickets = Objects.requireNonNull(tickets, "tickets");
         this.contentMetadata = Objects.requireNonNull(contentMetadata, "contentMetadata");
+        this.directory = Objects.requireNonNull(directory, "directory");
         this.authorization = Objects.requireNonNull(authorization, "authorization");
         this.callers = Objects.requireNonNull(callers, "callers");
         this.idempotency = Objects.requireNonNull(idempotency, "idempotency");
@@ -177,8 +186,38 @@ public class TicketController {
         // The parts, not an empty list: a ticket view that cannot say which fields left Jira is
         // a ticket view nobody would open. The content itself is not here — each part carries a
         // link, and following one is authorized separately and audited.
-        return ResponseEntity.ok(
-                TicketResponse.of(ticket, contentMetadata.partsOf(ticket.ticketRef()), links));
+        return ResponseEntity.ok(TicketResponse.of(ticket,
+                contentMetadata.partsOf(ticket.ticketRef()), links, displayNamesFor(ticket)));
+    }
+
+    /**
+     * Names for the account ids a ticket's fields hold.
+     *
+     * <p>Kept beside the raw values rather than replacing them: what was sent to Jira is a
+     * record, and rewriting it to read nicely would make the response a description of the
+     * ticket rather than the ticket. The interface shows the name and the record keeps the id.
+     */
+    private Map<String, String> displayNamesFor(TicketRecord ticket) {
+        var accountIds = new java.util.LinkedHashSet<String>();
+        ticket.jiraFields().forEach((field, value) -> {
+            if (value != null && !value.isBlank()
+                    && JiraFieldEncoding.forField(null, null, field)
+                            == JiraFieldEncoding.ACCOUNT_OBJECT) {
+                accountIds.add(value);
+            }
+        });
+
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        try {
+            return directory.displayNamesOf(accountIds);
+        } catch (RuntimeException e) {
+            // A courtesy, not a requirement. A ticket nobody can read because a name lookup
+            // failed would be a poor trade.
+            log.warn("Could not resolve display names for ticket {}", ticket.ticketRef(), e);
+            return Map.of();
+        }
     }
 
     private ResponseEntity<?> refuse(AuthorizationDecision decision) {
@@ -265,17 +304,24 @@ public class TicketController {
      * <p>{@code parts} names externally stored content and links to it; it never carries the
      * content itself, and the links are not capabilities — following one is authorized afresh.
      */
+    /**
+     * @param fieldDisplayNames readable values for the fields whose stored value is an
+     *                          identifier, keyed by that identifier. Absent for anything that
+     *                          could not be resolved, which the client shows as the raw value
+     */
     public record TicketResponse(String ticketRef,
                                  String state,
                                  String issueKey,
                                  Map<String, String> jiraFields,
+                                 Map<String, String> fieldDisplayNames,
                                  List<Part> parts) {
 
         static TicketResponse of(TicketCreationService.Result result, LinkFactory links) {
-            return of(result.ticket(), result.storedParts(), links);
+            return of(result.ticket(), result.storedParts(), links, Map.of());
         }
 
-        static TicketResponse of(TicketRecord ticket, List<ContentRecord> parts, LinkFactory links) {
+        static TicketResponse of(TicketRecord ticket, List<ContentRecord> parts, LinkFactory links,
+                                 Map<String, String> displayNames) {
             var partResponses = new ArrayList<Part>();
             for (ContentRecord part : parts) {
                 partResponses.add(new Part(part.contentRef(), part.partType().name(),
@@ -284,7 +330,7 @@ public class TicketController {
             }
             return new TicketResponse(ticket.ticketRef(), ticket.state().name(),
                     ticket.jiraIssueKey(), new LinkedHashMap<>(ticket.jiraFields()),
-                    List.copyOf(partResponses));
+                    Map.copyOf(displayNames), List.copyOf(partResponses));
         }
 
         /**

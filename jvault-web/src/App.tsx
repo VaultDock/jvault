@@ -5,7 +5,14 @@ import { CreateIssueForm } from './components/CreateIssueForm';
 import { SignIn } from './components/SignIn';
 import { TicketView } from './components/TicketView';
 import { AlertIcon, EmptyIcon } from './components/icons';
-import { LANGUAGES, TranslationProvider, pickLanguage, useT, type Language } from './i18n';
+import {
+  JiraSiteProvider,
+  LANGUAGES,
+  TranslationProvider,
+  pickLanguage,
+  useT,
+  type Language,
+} from './i18n';
 
 const DEPLOYMENT_ID = import.meta.env['VITE_DEPLOYMENT_ID'] ?? 'jira-cloud-dev';
 
@@ -49,6 +56,7 @@ export function App() {
 
   return (
     <TranslationProvider jiraLocale={identity?.jiraLocale ?? null}>
+      <JiraSiteProvider baseUrl={identity?.jiraBaseUrl ?? null}>
       <Chrome connection={identity ? 'live' : 'down'} auth={auth}>
         {ticketRefInPath() ? (
           <TicketView ticketRef={ticketRefInPath()!} />
@@ -56,6 +64,7 @@ export function App() {
           <CreateIssuePage jiraLocale={identity?.jiraLocale ?? null} />
         )}
       </Chrome>
+      </JiraSiteProvider>
     </TranslationProvider>
   );
 }

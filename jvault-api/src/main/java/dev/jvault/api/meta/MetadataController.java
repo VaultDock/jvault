@@ -45,15 +45,19 @@ public class MetadataController {
     private final PolicySet policies;
     private final CallerResolver callers;
     private final String deploymentId;
+    private final String jiraBaseUrl;
 
     public MetadataController(JiraMetadataGateway metadata,
                               PolicySet policies,
                               CallerResolver callers,
-                              String deploymentId) {
+                              String deploymentId,
+                              @org.springframework.beans.factory.annotation.Value(
+                                      "${jvault.jira.base-url:}") String jiraBaseUrl) {
         this.metadata = Objects.requireNonNull(metadata, "metadata");
         this.policies = Objects.requireNonNull(policies, "policies");
         this.callers = Objects.requireNonNull(callers, "callers");
         this.deploymentId = Objects.requireNonNull(deploymentId, "deploymentId");
+        this.jiraBaseUrl = jiraBaseUrl == null ? "" : trimTrailingSlash(jiraBaseUrl);
     }
 
     @GetMapping("/projects")
@@ -77,7 +81,8 @@ public class MetadataController {
                     caller.principal().externalId(),
                     jiraAccount.displayName(),
                     jiraAccount.locale(),
-                    deploymentId));
+                    deploymentId,
+                    jiraBaseUrl));
         });
     }
 
@@ -217,6 +222,10 @@ public class MetadataController {
         };
     }
 
+    private static String trimTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
+
     private static PartType partTypeOf(String fieldKey) {
         return switch (fieldKey == null ? "" : fieldKey) {
             case "summary" -> PartType.SUMMARY;
@@ -262,7 +271,14 @@ public class MetadataController {
      * @param jiraLocale the language Jira's own labels come back in, which is the service
      *                   account's rather than this caller's
      */
-    public record Identity(String user, String jiraAccount, String jiraLocale, String deployment) {
+    /**
+     * @param jiraBaseUrl where this deployment's issues live, so a client can link to one. The
+     *                    link goes both ways: Jira carries a link to the vault, and the vault
+     *                    carries a link back — somebody reading either should be one click from
+     *                    the other
+     */
+    public record Identity(String user, String jiraAccount, String jiraLocale, String deployment,
+                           String jiraBaseUrl) {
     }
 
     /**
