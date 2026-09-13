@@ -47,6 +47,7 @@ const created = {
       partType: 'CUSTOM_FIELD',
       fieldKey: 'notes',
       classification: 'RESTRICTED',
+      mediaType: 'text/plain',
       link: '/c/ct-1',
     },
   ],

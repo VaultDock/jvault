@@ -920,6 +920,125 @@ button:focus-visible {
   text-decoration: underline;
 }
 
+/* --- a secured field, shown in place ------------------------------------- */
+
+.secured {
+  margin-bottom: 1rem;
+  border: 1px solid var(--vault-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.secured__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--vault-soft);
+  border-bottom: 1px solid var(--vault-border);
+}
+
+.secured__head > svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--vault);
+}
+
+.secured__name {
+  font-weight: 650;
+  font-size: 0.88rem;
+}
+
+.secured__body {
+  padding: 0.8rem;
+  background: var(--surface);
+}
+
+.secured__text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.secured__image {
+  display: block;
+  max-width: 100%;
+  border-radius: 3px;
+}
+
+.adf > :first-child {
+  margin-top: 0;
+}
+
+.adf > :last-child {
+  margin-bottom: 0;
+}
+
+.adf p {
+  margin: 0 0 0.7em;
+}
+
+.adf h1,
+.adf h2,
+.adf h3,
+.adf h4,
+.adf h5,
+.adf h6 {
+  margin: 1.1em 0 0.45em;
+  line-height: 1.3;
+}
+
+.adf h1 { font-size: 1.3rem; }
+.adf h2 { font-size: 1.15rem; }
+.adf h3 { font-size: 1.02rem; }
+
+.adf ul,
+.adf ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.4rem;
+}
+
+.adf li {
+  margin-bottom: 0.2em;
+}
+
+.adf blockquote {
+  margin: 0 0 0.7em;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.adf pre {
+  margin: 0 0 0.7em;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.adf code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.87em;
+}
+
+.adf :not(pre) > code {
+  padding: 0.1em 0.3em;
+  background: var(--surface-sunken);
+  border-radius: 3px;
+}
+
+.adf hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+.adf a {
+  color: var(--accent);
+}
+
 /* --- empty state --------------------------------------------------------- */
 
 .empty {

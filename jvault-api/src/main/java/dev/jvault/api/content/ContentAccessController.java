@@ -24,7 +24,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -49,6 +51,19 @@ import java.util.Optional;
  */
 @RestController
 public class ContentAccessController {
+
+    /** A preview is a preview; past this it is a file, and a browser tab is the wrong place. */
+    private static final long MAX_RENDER_BYTES = 2L * 1024 * 1024;
+
+    /**
+     * The only types served inline, and the list is short on purpose.
+     *
+     * <p>SVG is absent: it is a document format that can carry script, and serving one inline
+     * from this origin would run that script with this origin's privileges. It is previewed as
+     * "cannot preview" instead, which is a small loss against a large hole.
+     */
+    private static final java.util.Set<String> INLINE_IMAGE_TYPES = java.util.Set.of(
+            "image/png", "image/jpeg", "image/gif", "image/webp", "image/bmp");
 
     private final ContentService contentService;
     private final TicketRepository tickets;
@@ -92,6 +107,71 @@ public class ContentAccessController {
                 ResponseEntity.ok()
                         .cacheControl(CacheControl.noStore())
                         .body(ContentMetadataResponse.of(record)));
+    }
+
+    /**
+     * The content, rendered for reading rather than for keeping.
+     *
+     * <p>Under {@link Permission#VIEW} rather than {@link Permission#DOWNLOAD}, which is the
+     * distinction the permission set was built around: "this group may read the incident
+     * narrative in the browser but must not take a copy of the evidence file onto a laptop".
+     *
+     * <p>What that buys is real but bounded, and worth stating rather than implying. The bytes
+     * reach the browser, so anyone who can read this can screenshot it or fetch it with the
+     * developer tools open. What this prevents is the ordinary path — no attachment disposition,
+     * no file on disk, nothing in the downloads folder — and it makes the grant express the
+     * intent, which is what an auditor is actually asking about.
+     */
+    @GetMapping("/api/v1/content/{contentRef}/render")
+    public ResponseEntity<?> render(@PathVariable String contentRef,
+                                    HttpServletRequest request) {
+        return resolve(contentRef, Permission.VIEW, request, (caller, record) -> {
+            if (record.sizeBytes() > MAX_RENDER_BYTES) {
+                // A preview is a preview. Something this size is a file, and rendering it in a
+                // browser tab helps nobody.
+                return ResponseEntity.ok()
+                        .cacheControl(CacheControl.noStore())
+                        .body(RenderedContent.tooLarge(record));
+            }
+
+            String mediaType = record.mediaType() == null ? "" : record.mediaType();
+            if (INLINE_IMAGE_TYPES.contains(mediaType)) {
+                return ResponseEntity.ok()
+                        .cacheControl(CacheControl.noStore())
+                        // inline, and only for the types on the list above. That list and
+                        // nosniff are what actually protect this: the list means the bytes are
+                        // never labelled as a document format, and nosniff stops the browser
+                        // deciding for itself that they are one anyway. Serving an attacker's
+                        // text/html back from this origin with an inline disposition would be
+                        // stored cross-site scripting with extra steps.
+                        //
+                        // No Content-Security-Policy header. Both the directives worth having
+                        // here — sandbox, and default-src 'none' — stop the browser painting
+                        // the image, the second by blocking the inline styles of the viewer it
+                        // generates. A header that breaks the feature and secures nothing is
+                        // worse than no header, because the next person assumes it works.
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                        .header("X-Content-Type-Options", "nosniff")
+                        .contentType(MediaType.parseMediaType(mediaType))
+                        .contentLength(record.sizeBytes())
+                        .body(new InputStreamResource(contentService.open(record)));
+            }
+
+            if (!isTextual(mediaType)) {
+                return ResponseEntity.ok()
+                        .cacheControl(CacheControl.noStore())
+                        .body(RenderedContent.unsupported(record));
+            }
+
+            try (InputStream stream = contentService.open(record)) {
+                String text = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+                return ResponseEntity.ok()
+                        .cacheControl(CacheControl.noStore())
+                        .body(RenderedContent.text(record, text));
+            } catch (IOException e) {
+                throw new IllegalStateException("could not read content for rendering", e);
+            }
+        });
     }
 
     @GetMapping("/api/v1/content/{contentRef}/download")
@@ -191,6 +271,18 @@ public class ContentAccessController {
         return "attachment; filename=\"" + sanitised + "\"";
     }
 
+    /**
+     * Whether the stored bytes are text jvault can show.
+     *
+     * <p>Content stored from a form field has no media type of its own — it was a string, not a
+     * file — so an absent type means text rather than unknown.
+     */
+    private static boolean isTextual(String mediaType) {
+        return mediaType.isBlank()
+                || mediaType.startsWith("text/")
+                || mediaType.equals("application/json");
+    }
+
     private static ResponseEntity<ProblemDetail> notFound() {
         return ResponseEntity.status(404).body(ApiProblem.notFound());
     }
@@ -209,6 +301,55 @@ public class ContentAccessController {
      */
     public interface AccessAuditor {
         void record(Caller caller, String contentRef, Permission permission, String reason);
+    }
+
+    /**
+     * Content rendered for reading.
+     *
+     * @param kind     what the client should do with this: show the rich-text document, show the
+     *                 text, or say plainly that jvault cannot preview it
+     * @param document the parsed rich-text document, when the stored text is one. Parsed here
+     *                 rather than in the browser so that a client which cannot read ADF still
+     *                 gets something, and so the shape is validated once
+     */
+    public record RenderedContent(String kind,
+                                  String mediaType,
+                                  long sizeBytes,
+                                  String text,
+                                  com.fasterxml.jackson.databind.JsonNode document) {
+
+        static RenderedContent text(ContentRecord record, String stored) {
+            com.fasterxml.jackson.databind.JsonNode document = asDocument(stored);
+            return document != null
+                    ? new RenderedContent("RICH_TEXT", record.mediaType(), record.sizeBytes(),
+                            null, document)
+                    : new RenderedContent("TEXT", record.mediaType(), record.sizeBytes(),
+                            stored, null);
+        }
+
+        static RenderedContent unsupported(ContentRecord record) {
+            return new RenderedContent("UNSUPPORTED", record.mediaType(), record.sizeBytes(),
+                    null, null);
+        }
+
+        static RenderedContent tooLarge(ContentRecord record) {
+            return new RenderedContent("TOO_LARGE", record.mediaType(), record.sizeBytes(),
+                    null, null);
+        }
+
+        /** The stored value as a rich-text document, or {@code null} if it is ordinary text. */
+        private static com.fasterxml.jackson.databind.JsonNode asDocument(String stored) {
+            if (!stored.stripLeading().startsWith("{")) {
+                return null;
+            }
+            try {
+                var parsed = new com.fasterxml.jackson.databind.ObjectMapper().readTree(stored);
+                return "doc".equals(parsed.path("type").asText()) ? parsed : null;
+            } catch (Exception e) {
+                // Text that happens to start with a brace is still somebody's description.
+                return null;
+            }
+        }
     }
 
     /** What a caller may know about content without downloading it. */

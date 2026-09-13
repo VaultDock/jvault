@@ -6,6 +6,7 @@ import type {
   IssueType,
   Problem,
   Project,
+  RenderedContent,
   TicketResponse,
   UploadedAttachment,
   UserRef,
@@ -61,6 +62,12 @@ async function problemFrom(response: Response): Promise<Problem> {
 
 export const api = {
   me: () => request<Identity>('/api/v1/meta/me'),
+
+  /** The content, rendered for reading. Requires VIEW; taking a copy is a separate grant. */
+  renderContent: (contentRef: string) =>
+    request<RenderedContent>(
+      `/api/v1/content/${encodeURIComponent(contentRef)}/render`,
+    ),
 
   ticket: (ticketRef: string) =>
     request<TicketResponse>(`/api/v1/tickets/${encodeURIComponent(ticketRef)}`),

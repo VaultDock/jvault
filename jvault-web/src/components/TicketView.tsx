@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { TicketResponse } from '../api/types';
 import { useT } from '../i18n';
-import { AlertIcon, CheckIcon, LockIcon, VaultIcon } from './icons';
+import { AlertIcon, CheckIcon, LockIcon } from './icons';
+import { SecuredPart } from './SecuredPart';
 
 /**
  * One ticket, with what Jira is not allowed to hold.
@@ -105,16 +106,9 @@ export function TicketView({ ticketRef }: { ticketRef: string }) {
 
           <h3>{t.heldInVault}</h3>
           {ticket.parts.length > 0 ? (
-            <ul className="parts">
-              {ticket.parts.map((part) => (
-                <li key={part.contentRef}>
-                  <VaultIcon />
-                  <span className="parts__name">{part.fieldKey ?? part.partType}</span>
-                  <span className="chip chip--class">{part.classification.toLowerCase()}</span>
-                  <a href={part.link}>{t.open}</a>
-                </li>
-              ))}
-            </ul>
+            // Shown, not linked. The value is read here rather than arriving in a downloads
+            // folder, which is the distinction the VIEW and DOWNLOAD grants exist to express.
+            ticket.parts.map((part) => <SecuredPart key={part.contentRef} part={part} />)
           ) : (
             <p className="notice">
               <LockIcon />

@@ -279,7 +279,7 @@ public class TicketController {
             var partResponses = new ArrayList<Part>();
             for (ContentRecord part : parts) {
                 partResponses.add(new Part(part.contentRef(), part.partType().name(),
-                        part.fieldKey(), part.classification().name(),
+                        part.fieldKey(), part.classification().name(), part.mediaType(),
                         links.linkTo(part.contentRef())));
             }
             return new TicketResponse(ticket.ticketRef(), ticket.state().name(),
@@ -287,8 +287,13 @@ public class TicketController {
                     List.copyOf(partResponses));
         }
 
+        /**
+         * @param mediaType what the bytes are, so a viewer can decide how to show them. Not the
+         *                  filename, which is sensitive and stays encrypted until somebody is
+         *                  authorized for the content itself
+         */
         public record Part(String contentRef, String partType, String fieldKey,
-                           String classification, String link) {
+                           String classification, String mediaType, String link) {
         }
     }
 }

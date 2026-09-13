@@ -59,6 +59,8 @@ export interface Strings {
   ticketViewTagline: string;
   ticketNotVisible: string;
   nothingSecured: string;
+  tooLargeToShow: string;
+  cannotPreview: (mediaType: string) => string;
   notInJira: string;
   open: string;
   searchPeople: string;
@@ -129,6 +131,8 @@ const en: Strings = {
   ticketViewTagline: 'What this ticket keeps outside Jira.',
   ticketNotVisible: 'This ticket does not exist, or you are not allowed to see it.',
   nothingSecured: 'Nothing on this ticket is held outside Jira.',
+  tooLargeToShow: 'This is too large to show here.',
+  cannotPreview: (mediaType) => `jvault cannot show ${mediaType} on a page.`,
   notInJira: 'Not in Jira',
   open: 'open',
   searchPeople: 'Search people…',
@@ -199,6 +203,8 @@ const de: Strings = {
   ticketViewTagline: 'Was dieser Vorgang außerhalb von Jira aufbewahrt.',
   ticketNotVisible: 'Dieser Vorgang existiert nicht, oder Sie dürfen ihn nicht sehen.',
   nothingSecured: 'Zu diesem Vorgang wird nichts außerhalb von Jira aufbewahrt.',
+  tooLargeToShow: 'Das ist zu groß, um es hier anzuzeigen.',
+  cannotPreview: (mediaType) => `jvault kann ${mediaType} nicht auf einer Seite anzeigen.`,
   notInJira: 'Nicht in Jira',
   open: 'öffnen',
   searchPeople: 'Personen suchen…',
@@ -269,6 +275,8 @@ const fr: Strings = {
   ticketViewTagline: 'Ce que ce ticket conserve hors de Jira.',
   ticketNotVisible: 'Ce ticket n’existe pas, ou vous n’êtes pas autorisé à le voir.',
   nothingSecured: 'Rien dans ce ticket n’est conservé hors de Jira.',
+  tooLargeToShow: 'Trop volumineux pour être affiché ici.',
+  cannotPreview: (mediaType) => `jvault ne peut pas afficher ${mediaType} sur une page.`,
   notInJira: 'Pas dans Jira',
   open: 'ouvrir',
   searchPeople: 'Rechercher des personnes…',
@@ -339,6 +347,8 @@ const es: Strings = {
   ticketViewTagline: 'Lo que esta incidencia guarda fuera de Jira.',
   ticketNotVisible: 'Esta incidencia no existe, o no tiene permiso para verla.',
   nothingSecured: 'Nada de esta incidencia se guarda fuera de Jira.',
+  tooLargeToShow: 'Es demasiado grande para mostrarlo aquí.',
+  cannotPreview: (mediaType) => `jvault no puede mostrar ${mediaType} en una página.`,
   notInJira: 'No está en Jira',
   open: 'abrir',
   searchPeople: 'Buscar personas…',
@@ -409,6 +419,8 @@ const it: Strings = {
   ticketViewTagline: 'Ciò che questo ticket conserva fuori da Jira.',
   ticketNotVisible: 'Questo ticket non esiste, oppure non hai il permesso di vederlo.',
   nothingSecured: 'Nulla di questo ticket è conservato fuori da Jira.',
+  tooLargeToShow: 'È troppo grande per essere mostrato qui.',
+  cannotPreview: (mediaType) => `jvault non può mostrare ${mediaType} in una pagina.`,
   notInJira: 'Non in Jira',
   open: 'apri',
   searchPeople: 'Cerca persone…',
@@ -479,6 +491,8 @@ const nl: Strings = {
   ticketViewTagline: 'Wat dit ticket buiten Jira bewaart.',
   ticketNotVisible: 'Dit ticket bestaat niet, of u mag het niet zien.',
   nothingSecured: 'Niets van dit ticket wordt buiten Jira bewaard.',
+  tooLargeToShow: 'Dit is te groot om hier te tonen.',
+  cannotPreview: (mediaType) => `jvault kan ${mediaType} niet op een pagina tonen.`,
   notInJira: 'Niet in Jira',
   open: 'openen',
   searchPeople: 'Personen zoeken…',
@@ -549,6 +563,8 @@ const pt: Strings = {
   ticketViewTagline: 'O que este ticket guarda fora do Jira.',
   ticketNotVisible: 'Este ticket não existe, ou não tem permissão para o ver.',
   nothingSecured: 'Nada neste ticket é guardado fora do Jira.',
+  tooLargeToShow: 'É demasiado grande para mostrar aqui.',
+  cannotPreview: (mediaType) => `O jvault não consegue mostrar ${mediaType} numa página.`,
   notInJira: 'Não está no Jira',
   open: 'abrir',
   searchPeople: 'Procurar pessoas…',
@@ -619,6 +635,8 @@ const lb: Strings = {
   ticketViewTagline: 'Wat dësen Ticket ausserhalb vum Jira behält.',
   ticketNotVisible: 'Dësen Ticket gëtt et net, oder Dir däerft en net gesinn.',
   nothingSecured: 'Näischt vun dësem Ticket gëtt ausserhalb vum Jira behalen.',
+  tooLargeToShow: 'Dat ass ze grouss fir hei ze weisen.',
+  cannotPreview: (mediaType) => `De jvault kann ${mediaType} net op enger Säit weisen.`,
   notInJira: 'Net am Jira',
   open: 'opmaachen',
   searchPeople: 'Leit sichen…',

@@ -69,6 +69,7 @@ export interface TicketPart {
   partType: string;
   fieldKey: string | null;
   classification: string;
+  mediaType: string | null;
   link: string;
 }
 
@@ -118,4 +119,13 @@ export interface IssueRef {
   key: string;
   summary: string | null;
   issueTypeName: string | null;
+}
+
+/** Content rendered for reading rather than for keeping. */
+export interface RenderedContent {
+  kind: 'RICH_TEXT' | 'TEXT' | 'UNSUPPORTED' | 'TOO_LARGE';
+  mediaType: string | null;
+  sizeBytes: number;
+  text: string | null;
+  document: unknown;
 }
