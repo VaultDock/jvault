@@ -19,6 +19,7 @@ public record JvaultProperties(String tenant,
                                Storage storage,
                                Crypto crypto,
                                List<Policy> policies,
+                               Kafka kafka,
                                Dev dev) {
 
     public JvaultProperties {
@@ -28,6 +29,7 @@ public record JvaultProperties(String tenant,
         storage = storage == null ? new Storage(null, null, null) : storage;
         crypto = crypto == null ? new Crypto(null) : crypto;
         policies = policies == null ? List.of() : List.copyOf(policies);
+        kafka = kafka == null ? new Kafka(false, null, null, null, null) : kafka;
         dev = dev == null ? new Dev(false, null, null) : dev;
     }
 
@@ -103,6 +105,28 @@ public record JvaultProperties(String tenant,
             keyRing = keyRing == null ? "default" : keyRing;
             links = links == null || links.isEmpty() ? List.of("REMOTE_LINK") : List.copyOf(links);
             allowOverride = allowOverride != null && allowOverride;
+        }
+    }
+
+    /**
+     * Kafka ingestion.
+     *
+     * @param enabled        off unless asked for. A consumer that starts because nobody turned
+     *                       it off is a consumer creating tickets nobody expected
+     * @param mappingsFile   the YAML that says what messages mean. No mappings, no ingestion:
+     *                       there is no sensible default for what a stranger's event becomes
+     * @param deadLetterSuffix appended to a mapping's topic to name its dead-letter topic
+     * @param quarantineKeyRing the ring that encrypts rejected payloads, which are content
+     */
+    public record Kafka(boolean enabled,
+                        String bootstrapServers,
+                        String mappingsFile,
+                        String deadLetterSuffix,
+                        String quarantineKeyRing) {
+
+        public Kafka {
+            deadLetterSuffix = deadLetterSuffix == null ? ".dlq" : deadLetterSuffix;
+            quarantineKeyRing = quarantineKeyRing == null ? "sec-restricted" : quarantineKeyRing;
         }
     }
 

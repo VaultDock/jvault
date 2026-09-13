@@ -13,7 +13,7 @@ import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * Envelope encryption for short strings that are themselves sensitive.
+ * Envelope encryption for short values that are themselves sensitive.
  *
  * <p>An attachment called {@code 2026-Q3-layoffs-final.xlsx} tells you most of what the file
  * contains, so a filename column in the clear would undo a good deal of what encrypting the
@@ -49,8 +49,18 @@ public final class SensitiveTextCipher {
      */
     public Sealed seal(String keyRing, SensitiveValue value, String binding) {
         Objects.requireNonNull(value, "value");
+        return seal(keyRing, value.reveal().getBytes(StandardCharsets.UTF_8), binding);
+    }
 
-        byte[] plaintext = value.reveal().getBytes(StandardCharsets.UTF_8);
+    /**
+     * The same envelope over arbitrary bytes.
+     *
+     * <p>For values that are sensitive and small enough to sit in a column: a filename, a
+     * rejected message payload. Anything measured in megabytes belongs in the streaming content
+     * cipher and a storage backend, not here.
+     */
+    public Sealed seal(String keyRing, byte[] value, String binding) {
+        byte[] plaintext = value.clone();
         try (DataKey key = kms.generateDataKey(keyRing)) {
             byte[] nonce = new byte[NONCE_BYTES];
             random.nextBytes(nonce);
@@ -78,6 +88,16 @@ public final class SensitiveTextCipher {
 
     /** The value, or a failure — never a partially trusted result. */
     public SensitiveValue open(String keyRing, Sealed sealed, String binding, String label) {
+        byte[] plaintext = openBytes(keyRing, sealed, binding);
+        try {
+            return SensitiveValue.of(new String(plaintext, StandardCharsets.UTF_8), label);
+        } finally {
+            Arrays.fill(plaintext, (byte) 0);
+        }
+    }
+
+    /** The bytes, or a failure — never a partially trusted result. */
+    public byte[] openBytes(String keyRing, Sealed sealed, String binding) {
         Objects.requireNonNull(sealed, "sealed");
 
         if (sealed.ciphertext().length <= NONCE_BYTES) {
@@ -90,13 +110,7 @@ public final class SensitiveTextCipher {
                     new GCMParameterSpec(TAG_BITS, combined, 0, NONCE_BYTES));
             cipher.updateAAD(binding.getBytes(StandardCharsets.UTF_8));
 
-            byte[] plaintext = cipher.doFinal(
-                    combined, NONCE_BYTES, combined.length - NONCE_BYTES);
-            try {
-                return SensitiveValue.of(new String(plaintext, StandardCharsets.UTF_8), label);
-            } finally {
-                Arrays.fill(plaintext, (byte) 0);
-            }
+            return cipher.doFinal(combined, NONCE_BYTES, combined.length - NONCE_BYTES);
         } catch (KeyManagementService.KeyUnwrapException e) {
             throw e;
         } catch (Exception e) {

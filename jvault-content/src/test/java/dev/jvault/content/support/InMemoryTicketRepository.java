@@ -43,6 +43,15 @@ public final class InMemoryTicketRepository implements TicketRepository {
         return Optional.ofNullable(byRef.get(ticketRef));
     }
 
+    /** Everything reserved so far, for tests that assert on how many tickets were created. */
+    public synchronized java.util.List<TicketRecord> all() {
+        return java.util.List.copyOf(byRef.values());
+    }
+
+    public synchronized int count() {
+        return byRef.size();
+    }
+
     @Override
     public synchronized Optional<TicketRecord> findByDedupeKey(String deploymentId,
                                                                String projectKey,
