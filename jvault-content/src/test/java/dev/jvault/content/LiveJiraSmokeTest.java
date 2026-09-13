@@ -20,7 +20,11 @@ import dev.jvault.jira.deployment.CloudDeployment;
 import dev.jvault.jira.deployment.JiraCredentials;
 import dev.jvault.jira.egress.EgressGuard;
 import dev.jvault.jira.gateway.HttpJiraWriteGateway;
+import dev.jvault.jira.gateway.HttpJiraIssueSearch;
 import dev.jvault.jira.gateway.JdkJiraHttpClient;
+import dev.jvault.jira.gateway.JiraWriteGateway;
+import dev.jvault.outbox.ambiguity.AmbiguityReconciler;
+import dev.jvault.outbox.ambiguity.AmbiguityResolver;
 import dev.jvault.outbox.DispatchReport;
 import dev.jvault.outbox.OutboxDispatcher;
 import dev.jvault.outbox.TicketStateSink;
@@ -183,6 +187,121 @@ class LiveJiraSmokeTest {
         assertThat(rawBytesOnDisk()).doesNotContain("AWS_SECRET_ACCESS_KEY");
 
         System.out.println("  jvault holds the narrative; Jira holds a link. Verified.");
+    }
+
+    @Test
+    @DisplayName("a create whose response is lost is recovered, not duplicated")
+    void ambiguousCreateIsRecovered() throws Exception {
+        var clock = Clock.systemUTC();
+        var outbox = new InMemoryOutboxRepository();
+        var tickets = new InMemoryTicketRepository();
+        var metadata = new InMemoryContentMetadataRepository();
+        var kms = LocalKeyManagementService.withKeyRings(KEY_RING);
+        var store = new FilesystemContentStore("fs-local", storageRoot);
+        var ids = ContentService.IdGenerator.random();
+
+        var contentService = new ContentService(new ContentCipher(kms, 4096), store, metadata,
+                ids, clock, "live", storageRoot.resolve("spool"));
+        var creation = new TicketCreationService(policies(), contentService, tickets, outbox,
+                new LinkFactory("https://jvault.example.com"), ids, clock);
+        var assembler = new TicketPayloadAssembler(
+                tickets, new InMemoryCommentRepository(), metadata, contentService);
+
+        var deployment = new CloudDeployment(DEPLOYMENT, "unused",
+                JiraCredentials.basic(EMAIL, () -> TOKEN), SITE);
+        var http = new JdkJiraHttpClient(deployment);
+        var realGateway = new HttpJiraWriteGateway(deployment, http);
+
+        // The failure this protocol exists for: Jira applies the write and we never hear back.
+        // The request really is sent, so an issue really is created — we simply cannot know it.
+        JiraWriteGateway lyingGateway = payload -> {
+            JiraWriteGateway.JiraWriteResult real = realGateway.execute(payload);
+            System.out.println("  (gateway really got " + real.outcome()
+                    + " for " + payload.operation() + ", reporting AMBIGUOUS)");
+            return JiraWriteGateway.JiraWriteResult.ambiguous("JIRA_TIMEOUT");
+        };
+
+        String correlationId = "live-amb-" + UUID.randomUUID();
+        creation.create(TicketCommand.builder(DEPLOYMENT, PROJECT, ISSUE_TYPE)
+                .field("summary", "[jvault] ambiguity recovery probe - safe to delete")
+                .field("description", CANARY)
+                .dedupeKey(correlationId)
+                .correlationId(correlationId)
+                .origin(TicketCommand.Origin.kafka("smoke@example.com", "INTEGRATION:live"))
+                .build());
+
+        var adopted = new java.util.concurrent.atomic.AtomicReference<String>();
+        var adoptedId = new java.util.concurrent.atomic.AtomicReference<String>();
+        var dispatcher = new OutboxDispatcher(outbox, assembler, EgressGuard.withDefaults(),
+                lyingGateway, PerIssueRateLimiter.jiraCloudDefaults(),
+                BackoffPolicy.atlassianDefault(), sink(adopted, adoptedId, tickets), clock,
+                new Random());
+
+        DispatchReport report = dispatcher.runOnce(10);
+        System.out.println("  dispatch: " + report.summary());
+        assertThat(report.count(DispatchReport.Disposition.HELD_AMBIGUOUS)).isEqualTo(1);
+        assertThat(adopted.get()).as("the dispatcher must not have concluded anything").isNull();
+
+        // Now the reconciler, against the real search API.
+        var sweeps = new java.util.HashMap<String, Integer>();
+        var reconciler = new AmbiguityReconciler(outbox,
+                AmbiguityResolver.withDefaults(new HttpJiraIssueSearch(deployment, http), clock),
+                sink(adopted, adoptedId, tickets),
+                AmbiguityReconciler.AmbiguityContextSource.fromPayloadRef(),
+                new AmbiguityReconciler.SweepCounter() {
+                    @Override
+                    public int sweepsFor(String ticketRef) {
+                        return sweeps.getOrDefault(ticketRef, 0);
+                    }
+
+                    @Override
+                    public void recordSweep(String ticketRef) {
+                        sweeps.merge(ticketRef, 1, Integer::sum);
+                    }
+
+                    @Override
+                    public void clear(String ticketRef) {
+                        sweeps.remove(ticketRef);
+                    }
+                },
+                clock, Duration.ZERO);
+
+        // Jira's search index is not updated synchronously with a create, so the first sweep
+        // legitimately finds nothing. That is exactly why the protocol holds rather than retries.
+        AmbiguityReconciler.Report sweep = null;
+        for (int attempt = 1; attempt <= 6 && adopted.get() == null; attempt++) {
+            sweep = reconciler.sweep(10);
+            System.out.println("  sweep " + attempt + ": " + sweep.outcomes());
+            if (adopted.get() == null) {
+                Thread.sleep(2000);
+            }
+        }
+
+        createdIssueKey = adopted.get();
+        assertThat(createdIssueKey)
+                .as("the reconciler should have found the issue Jira really created")
+                .isNotNull();
+        assertThat(sweep.count("ADOPTED")).isEqualTo(1);
+        System.out.println("  recovered " + createdIssueKey + " without creating a duplicate");
+
+        // And exactly one issue carries this correlation id — no duplicate was made.
+        assertThat(countIssuesWithCorrelation(correlationId)).isEqualTo(1);
+    }
+
+    private int countIssuesWithCorrelation(String correlationId) throws Exception {
+        var response = jira("GET", "/rest/api/3/search/jql?jql="
+                + java.net.URLEncoder.encode(
+                        "project=" + PROJECT + " ORDER BY created DESC", StandardCharsets.UTF_8)
+                + "&maxResults=10&fields=summary");
+        int matches = 0;
+        for (JsonNode candidate : JSON.readTree(response.body()).path("issues")) {
+            JsonNode origin = JSON.readTree(jira("GET", "/rest/api/3/issue/"
+                    + candidate.path("key").asText() + "/properties/jvault.origin").body());
+            if (correlationId.equals(origin.at("/value/correlationId").asText())) {
+                matches++;
+            }
+        }
+        return matches;
     }
 
     // --- helpers -----------------------------------------------------------------
