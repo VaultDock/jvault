@@ -144,6 +144,18 @@ class MetadataControllerTest {
     }
 
     @Test
+    @DisplayName("a field jvault has no control for is read-only, not a text box")
+    void fieldsWithoutAControlAreReadOnly() throws Exception {
+        String body = fields();
+
+        // Jira will happily accept both. jvault has no upload control and no role picker, and a
+        // text box that takes an attachment is worse than one that admits it cannot.
+        assertThat(field(body, "attachment").get("supportLevel").asText()).isEqualTo("READ_ONLY");
+        assertThat(field(body, "issuerestriction").get("supportLevel").asText())
+                .isEqualTo("READ_ONLY");
+    }
+
+    @Test
     @DisplayName("an anonymous caller gets 401")
     void anonymousIsRefused() throws Exception {
         caller.set(null);
@@ -202,6 +214,12 @@ class MetadataControllerTest {
                         new FieldMeta("summary", "Summary", true, "string", null,
                                 List.of(), false, List.of("set")),
                         new FieldMeta("description", "Description", false, "string", null,
+                                List.of(), false, List.of("set")),
+                        new FieldMeta("attachment", "Attachment", false, "array", null,
+                                List.of(), false, List.of("set")),
+                        new FieldMeta("issuerestriction", "Restrict to", false,
+                                "issuerestriction", null, List.of(), false, List.of("set")),
+                        new FieldMeta("parent", "Parent", false, "issuelink", null,
                                 List.of(), false, List.of("set")),
                         new FieldMeta("labels", "Labels", false, "array", null,
                                 List.of(), false, List.of("set", "add", "remove")),

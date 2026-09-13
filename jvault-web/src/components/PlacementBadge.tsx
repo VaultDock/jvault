@@ -34,7 +34,7 @@ export function SupportNotice({ field }: { field: FormField }) {
   if (field.supportLevel === 'READ_ONLY') {
     return (
       <span className="notice">
-        Not editable here — Jira maintains this field. Open the issue in Jira to change it.
+        Not editable here — open the issue in Jira to change it.
       </span>
     );
   }

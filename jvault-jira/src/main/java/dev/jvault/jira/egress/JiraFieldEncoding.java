@@ -74,7 +74,8 @@ public enum JiraFieldEncoding {
                 case "description", "environment" -> RICH_TEXT;
                 case "labels" -> STRING_ARRAY;
                 case "priority", "issuetype", "resolution", "security" -> ID_OBJECT;
-                case "project" -> KEY_OBJECT;
+                // A parent, an epic link, a blocked-by: Jira names the issue, not its id.
+            case "project", "issuelink" -> KEY_OBJECT;
                 case "assignee", "reporter" -> ACCOUNT_OBJECT;
                 default -> null;
             };
@@ -89,7 +90,8 @@ public enum JiraFieldEncoding {
         return switch (schemaType) {
             case "number" -> NUMBER;
             case "user" -> ACCOUNT_OBJECT;
-            case "project" -> KEY_OBJECT;
+            // A parent, an epic link, a blocked-by: Jira names the issue, not its id.
+            case "project", "issuelink" -> KEY_OBJECT;
             case "priority", "issuetype", "resolution", "option", "securitylevel" -> ID_OBJECT;
             // An array of plain strings. An array of options would need a shape this enum does
             // not have; sending it as a string earns a named error rather than a silent mangling.

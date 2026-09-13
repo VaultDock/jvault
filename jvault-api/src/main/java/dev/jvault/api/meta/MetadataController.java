@@ -134,6 +134,13 @@ public class MetadataController {
         if (!field.settable()) {
             return SupportLevel.READ_ONLY;
         }
+        // Settable in Jira, and jvault has nothing to collect it with. An attachment needs an
+        // upload control and a restriction needs a role picker; rendering either as a text box
+        // would accept what someone typed and drop it, which is the failure this whole enum
+        // exists to prevent.
+        if ("attachment".equals(field.key()) || "issuerestriction".equals(field.schemaType())) {
+            return SupportLevel.READ_ONLY;
+        }
         String type = field.customType();
         if (type == null) {
             return SupportLevel.REPRODUCED;
