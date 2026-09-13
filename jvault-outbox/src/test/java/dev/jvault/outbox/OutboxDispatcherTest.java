@@ -61,6 +61,37 @@ class OutboxDispatcherTest {
     }
 
     @Test
+    @DisplayName("an entry that fails to assemble is rescheduled, not left claimed")
+    void unexpectedAssemblyFailureIsContained() {
+        enqueue(JiraOperation.CREATE_ISSUE, "create-issue", lane());
+        assembler.throwsUnexpectedly("create-issue");
+
+        DispatchReport report = dispatcher.runOnce(10);
+
+        // Letting this out of the dispatcher ends the pass with everything it claimed still
+        // marked CLAIMED — work nobody is doing, in a queue that then looks empty.
+        assertThat(report.count(DispatchReport.Disposition.RESCHEDULED_TRANSIENT)).isEqualTo(1);
+        assertThat(only().state()).isEqualTo(OutboxState.FAILED);
+        assertThat(only().lastErrorCode()).isEqualTo("ASSEMBLY_FAILED");
+        assertThat(gateway.sendCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("one entry failing to assemble does not strand the rest of the batch")
+    void oneBadEntryDoesNotStrandTheBatch() {
+        enqueue(JiraOperation.CREATE_ISSUE, "bad-one", "ticket:other");
+        enqueue(JiraOperation.CREATE_ISSUE, "create-issue", lane());
+        assembler.throwsUnexpectedly("bad-one");
+        gateway.fallback(JiraWriteResult.succeeded("10001", "SEC-4471"));
+
+        DispatchReport report = dispatcher.runOnce(10);
+
+        // Lanes are independent, so a lane that blew up must not take the others with it.
+        assertThat(report.count(DispatchReport.Disposition.SENT)).isEqualTo(1);
+        assertThat(repository.all()).noneMatch(entry -> entry.state() == OutboxState.CLAIMED);
+    }
+
+    @Test
     @DisplayName("an empty queue does no work")
     void emptyQueue() {
         assertThat(dispatcher.runOnce(10).outcomes()).isEmpty();

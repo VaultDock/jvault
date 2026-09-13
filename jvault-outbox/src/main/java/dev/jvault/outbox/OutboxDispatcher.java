@@ -8,6 +8,8 @@ import dev.jvault.jira.egress.JiraWriteRequest;
 import dev.jvault.jira.gateway.JiraWriteGateway;
 import dev.jvault.outbox.backoff.BackoffPolicy;
 import dev.jvault.outbox.ratelimit.PerIssueRateLimiter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -42,6 +44,8 @@ import java.util.random.RandomGenerator;
  * being retried, for instance.
  */
 public final class OutboxDispatcher {
+
+    private static final Logger log = LoggerFactory.getLogger(OutboxDispatcher.class);
 
     private final OutboxRepository repository;
     private final JiraPayloadAssembler assembler;
@@ -135,6 +139,18 @@ public final class OutboxDispatcher {
         JiraWriteRequest request;
         try {
             request = assembler.assemble(entry);
+        } catch (RuntimeException e) {
+            // Assembling reads content, metadata and keys, and any of those can fail in a way
+            // nobody anticipated. Letting it out of here ends the pass with everything else it
+            // claimed still marked CLAIMED — work nobody is doing, in a queue that looks empty.
+            // The entry is rescheduled rather than abandoned: the cause is usually the storage
+            // or the key manager rather than the entry.
+            log.error("Could not assemble the payload for {}", entry, e);
+            repository.save(entry.rescheduled(
+                    backoff.nextAttemptAt(now, entry.attempts() + 1, null, rng),
+                    "ASSEMBLY_FAILED"));
+            report.add(entry, DispatchReport.Disposition.RESCHEDULED_TRANSIENT, "ASSEMBLY_FAILED");
+            return LaneProgress.STOP;
         } catch (JiraPayloadAssembler.EffectNoLongerApplicable e) {
             // The end state already holds. Marking it succeeded is correct, not a fudge: the
             // outbox's job is to reach a desired state, not to force a particular call.

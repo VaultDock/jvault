@@ -8,6 +8,8 @@ import dev.jvault.domain.common.SensitiveValue;
 import dev.jvault.domain.placement.PartType;
 import dev.jvault.storage.spi.ObjectKey;
 import dev.jvault.storage.spi.StoredObjectRef;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -35,6 +37,9 @@ import java.util.Optional;
  * the clear would undo much of what encrypting the bytes achieved (docs/04-data-model.md 4.2).
  */
 public final class JdbcContentMetadataRepository implements ContentMetadataRepository {
+
+    private static final Logger log =
+            LoggerFactory.getLogger(JdbcContentMetadataRepository.class);
 
     /** The insert list. Kept beside the placeholder count so the two are edited together. */
     private static final String VERSION_COLUMNS = """
@@ -204,6 +209,15 @@ public final class JdbcContentMetadataRepository implements ContentMetadataRepos
         return new StoredObjectRef(route, new ObjectKey(parts[0], parts[1], parts[2]));
     }
 
+    /**
+     * The filename, if it can be read.
+     *
+     * <p>A failure here is deliberately not fatal to the row. Everything else in it — the
+     * hashes, the storage location, the classification, the wrapped content key — is still true
+     * and still needed, including by the code that would have to diagnose why a key stopped
+     * working. Letting an unreadable name take the whole record down turns a lost filename into
+     * a ticket that cannot be dispatched, which is what it did.
+     */
     private SensitiveValue displayName(ResultSet rs, String versionId) throws SQLException {
         byte[] ciphertext = rs.getBytes("display_name_enc");
         if (ciphertext == null) {
@@ -212,7 +226,15 @@ public final class JdbcContentMetadataRepository implements ContentMetadataRepos
         var sealed = new SensitiveTextCipher.Sealed(
                 rs.getString("display_name_kek"), rs.getBytes("display_name_dek"), ciphertext);
         String label = rs.getString("display_name_label");
-        return names.open(rs.getString("key_ring"), sealed, versionId,
-                label == null ? "display name" : label);
+        try {
+            return names.open(rs.getString("key_ring"), sealed, versionId,
+                    label == null ? "display name" : label);
+        } catch (RuntimeException e) {
+            // Identifiers only: the exception knows the key ring and the version, and neither is
+            // content. Logged at error because a key that cannot open its own data is a fault.
+            log.error("Could not decrypt the display name of version {} under ring {}",
+                    versionId, rs.getString("key_ring"), e);
+            return null;
+        }
     }
 }

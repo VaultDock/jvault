@@ -18,6 +18,10 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
       <groupId>dev.jvault</groupId>
       <artifactId>jvault-domain</artifactId>
       <version>${project.version}</version>

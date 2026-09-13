@@ -20,6 +20,7 @@ public final class StubPayloadAssembler implements JiraPayloadAssembler {
 
     private final Map<String, String> summaries = new HashMap<>();
     private final Set<String> notApplicable = new HashSet<>();
+    private final Set<String> unexpected = new HashSet<>();
     private final Map<String, SensitiveValue> leaks = new HashMap<>();
     private final Map<String, SensitiveValue> externalParts = new HashMap<>();
     private Classification classification = Classification.INTERNAL;
@@ -31,6 +32,15 @@ public final class StubPayloadAssembler implements JiraPayloadAssembler {
 
     public StubPayloadAssembler notApplicable(String effectKey) {
         notApplicable.add(effectKey);
+        return this;
+    }
+
+    /**
+     * Fails in a way nobody declared: assembling reads content, metadata and keys, and any of
+     * those can throw something the dispatcher was not written to expect.
+     */
+    public StubPayloadAssembler throwsUnexpectedly(String effectKey) {
+        unexpected.add(effectKey);
         return this;
     }
 
@@ -55,6 +65,9 @@ public final class StubPayloadAssembler implements JiraPayloadAssembler {
     public JiraWriteRequest assemble(OutboxEntry entry) throws EffectNoLongerApplicable {
         if (notApplicable.contains(entry.effectKey())) {
             throw new EffectNoLongerApplicable("PART_DELETED");
+        }
+        if (unexpected.contains(entry.effectKey())) {
+            throw new IllegalStateException("the content key could not be unwrapped");
         }
         var builder = JiraWriteRequest.builder(entry.operation(), entry.ticketRef())
                 .issueLane(entry.issueLane())
