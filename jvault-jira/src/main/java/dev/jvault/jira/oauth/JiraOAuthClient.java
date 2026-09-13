@@ -47,8 +47,12 @@ public final class JiraOAuthClient {
      * exercises, which is the kind of thing that fails a review for good reason.
      */
     private static final List<String> SCOPES = List.of(
-            // The only thing this token is ever used for: asking Jira whether this person may
-            // browse a project. User search and metadata go through the service account, so
+            // Identity: the account id that becomes the principal grants are written against.
+            // Atlassian is the identity provider in this deployment, so this is the one scope
+            // that is about who somebody is rather than what they may see.
+            "read:me",
+            // Asking Jira whether this person may browse a project — the only use of the token
+            // beyond identity. User search and metadata go through the service account, so
             // read:jira-user would be a scope nothing reads.
             "read:jira-work",
             // Without it Atlassian issues no refresh token and the connection dies at the first

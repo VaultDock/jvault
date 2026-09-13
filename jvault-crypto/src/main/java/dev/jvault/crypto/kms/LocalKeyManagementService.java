@@ -49,11 +49,54 @@ public final class LocalKeyManagementService implements KeyManagementService {
         return kms;
     }
 
+    /**
+     * Rings whose keys are derived from a passphrase, so a restart can still read what the last
+     * run wrote.
+     *
+     * <p>For development only, and a shade worse than the random version it replaces: the keys
+     * are as strong as the passphrase and they survive in whatever holds it. That is the trade
+     * being made, and it buys something real — with random keys, every restart silently turns
+     * every stored credential and every stored document into ciphertext nobody can open, which
+     * looks like a dozen unrelated bugs rather than one expected consequence.
+     *
+     * <p>Neither version belongs in production. A deployment replaces this bean with a KMS or an
+     * HSM, where the key does not live in the same memory as the data it protects.
+     */
+    public static LocalKeyManagementService withDerivedKeyRings(String passphrase,
+                                                                String... keyRingNames) {
+        Objects.requireNonNull(passphrase, "passphrase");
+        var kms = new LocalKeyManagementService();
+        for (String name : keyRingNames) {
+            kms.deriveKeyRing(passphrase, name);
+        }
+        return kms;
+    }
+
     public void createKeyRing(String keyRing) {
         byte[] kek = new byte[DATA_KEY_BYTES];
         random.nextBytes(kek);
         keyRings.put(keyRing, kek);
         kekIds.put(keyRing, "local:" + keyRing + ":v1");
+    }
+
+    /**
+     * The ring's key from a passphrase and the ring's own name.
+     *
+     * <p>The name is the salt, so two rings under one passphrase hold different keys — otherwise
+     * "which ring was this sealed under" would stop being a question with an answer.
+     */
+    public void deriveKeyRing(String passphrase, String keyRing) {
+        try {
+            var spec = new javax.crypto.spec.PBEKeySpec(passphrase.toCharArray(),
+                    ("jvault:" + keyRing).getBytes(StandardCharsets.UTF_8),
+                    210_000, DATA_KEY_BYTES * 8);
+            byte[] kek = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+                    .generateSecret(spec).getEncoded();
+            keyRings.put(keyRing, kek);
+            kekIds.put(keyRing, "local-derived:" + keyRing + ":v1");
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("could not derive a key ring", e);
+        }
     }
 
     /**

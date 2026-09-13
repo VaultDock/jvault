@@ -82,6 +82,9 @@ export interface Strings {
   tooLargeToShow: string;
   cannotPreview: (mediaType: string) => string;
   notInJira: string;
+  jiraRejected: string;
+  ticketView: string;
+  openTicketView: string;
   open: string;
   searchPeople: string;
   searchIssues: string;
@@ -174,6 +177,9 @@ const en: Strings = {
   tooLargeToShow: 'This is too large to show here.',
   cannotPreview: (mediaType) => `jvault cannot show ${mediaType} on a page.`,
   notInJira: 'Not in Jira',
+  jiraRejected: 'Jira refused this ticket. Open the ticket view to see what it holds.',
+  ticketView: 'Ticket view',
+  openTicketView: 'Open',
   open: 'open',
   searchPeople: 'Search people…',
   searchIssues: 'Search issues…',
@@ -266,6 +272,9 @@ const de: Strings = {
   tooLargeToShow: 'Das ist zu groß, um es hier anzuzeigen.',
   cannotPreview: (mediaType) => `jvault kann ${mediaType} nicht auf einer Seite anzeigen.`,
   notInJira: 'Nicht in Jira',
+  jiraRejected: 'Jira hat diesen Vorgang abgelehnt. Öffnen Sie die Ticketansicht, um den Inhalt zu sehen.',
+  ticketView: 'Ticketansicht',
+  openTicketView: 'Öffnen',
   open: 'öffnen',
   searchPeople: 'Personen suchen…',
   searchIssues: 'Vorgänge suchen…',
@@ -358,6 +367,9 @@ const fr: Strings = {
   tooLargeToShow: 'Trop volumineux pour être affiché ici.',
   cannotPreview: (mediaType) => `jvault ne peut pas afficher ${mediaType} sur une page.`,
   notInJira: 'Pas dans Jira',
+  jiraRejected: 'Jira a refusé ce ticket. Ouvrez la vue du ticket pour voir son contenu.',
+  ticketView: 'Vue du ticket',
+  openTicketView: 'Ouvrir',
   open: 'ouvrir',
   searchPeople: 'Rechercher des personnes…',
   searchIssues: 'Rechercher des tickets…',
@@ -450,6 +462,9 @@ const es: Strings = {
   tooLargeToShow: 'Es demasiado grande para mostrarlo aquí.',
   cannotPreview: (mediaType) => `jvault no puede mostrar ${mediaType} en una página.`,
   notInJira: 'No está en Jira',
+  jiraRejected: 'Jira rechazó esta incidencia. Abra la vista del ticket para ver su contenido.',
+  ticketView: 'Vista del ticket',
+  openTicketView: 'Abrir',
   open: 'abrir',
   searchPeople: 'Buscar personas…',
   searchIssues: 'Buscar incidencias…',
@@ -542,6 +557,9 @@ const it: Strings = {
   tooLargeToShow: 'È troppo grande per essere mostrato qui.',
   cannotPreview: (mediaType) => `jvault non può mostrare ${mediaType} in una pagina.`,
   notInJira: 'Non in Jira',
+  jiraRejected: 'Jira ha rifiutato questo ticket. Apri la vista del ticket per vederne il contenuto.',
+  ticketView: 'Vista del ticket',
+  openTicketView: 'Apri',
   open: 'apri',
   searchPeople: 'Cerca persone…',
   searchIssues: 'Cerca ticket…',
@@ -634,6 +652,9 @@ const nl: Strings = {
   tooLargeToShow: 'Dit is te groot om hier te tonen.',
   cannotPreview: (mediaType) => `jvault kan ${mediaType} niet op een pagina tonen.`,
   notInJira: 'Niet in Jira',
+  jiraRejected: 'Jira heeft dit ticket geweigerd. Open de ticketweergave om de inhoud te zien.',
+  ticketView: 'Ticketweergave',
+  openTicketView: 'Openen',
   open: 'openen',
   searchPeople: 'Personen zoeken…',
   searchIssues: 'Tickets zoeken…',
@@ -726,6 +747,9 @@ const pt: Strings = {
   tooLargeToShow: 'É demasiado grande para mostrar aqui.',
   cannotPreview: (mediaType) => `O jvault não consegue mostrar ${mediaType} numa página.`,
   notInJira: 'Não está no Jira',
+  jiraRejected: 'O Jira recusou este ticket. Abra a vista do ticket para ver o conteúdo.',
+  ticketView: 'Vista do ticket',
+  openTicketView: 'Abrir',
   open: 'abrir',
   searchPeople: 'Procurar pessoas…',
   searchIssues: 'Procurar tickets…',
@@ -818,6 +842,9 @@ const lb: Strings = {
   tooLargeToShow: 'Dat ass ze grouss fir hei ze weisen.',
   cannotPreview: (mediaType) => `De jvault kann ${mediaType} net op enger Säit weisen.`,
   notInJira: 'Net am Jira',
+  jiraRejected: 'De Jira huet dësen Ticket refuséiert. Maacht d’Ticketusiicht op fir ze gesinn, wat dra steet.',
+  ticketView: 'Ticketusiicht',
+  openTicketView: 'Opmaachen',
   open: 'opmaachen',
   searchPeople: 'Leit sichen…',
   searchIssues: 'Ticketë sichen…',

@@ -6,6 +6,7 @@ import dev.jvault.authz.Grant;
 import dev.jvault.authz.Permission;
 import dev.jvault.authz.Principal;
 import dev.jvault.authz.Scope;
+import dev.jvault.authz.session.SessionStore;
 import dev.jvault.content.CommentRecord;
 import dev.jvault.content.ContentRecord;
 import dev.jvault.content.TicketCommand;
@@ -94,7 +95,8 @@ class JdbcVaultRepositoriesTest {
     void setUp() throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
-            for (String table : List.of("acl_grant_permission", "acl_grant",
+            for (String table : List.of("jira_connection", "user_session", "auth_state",
+                    "acl_grant_permission", "acl_grant",
                     "acl_inheritance_break", "content_version", "content_part", "ticket_comment",
                     "ticket_field", "ticket_external_part", "ticket_record")) {
                 statement.execute("DELETE FROM " + table);
@@ -302,6 +304,119 @@ class JdbcVaultRepositoriesTest {
             CommentRecord loaded = comments.find("cm-1").orElseThrow();
             assertThat(loaded.jiraCommentId()).isEqualTo("10501");
             assertThat(loaded.isExternallyStored()).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("sessions and Jira connections")
+    class Sessions {
+
+        private JdbcSessionStore store;
+
+        @BeforeEach
+        void openStore() {
+            store = new JdbcSessionStore(dataSource,
+                    new SensitiveTextCipher(LocalKeyManagementService.withKeyRings(RING)), RING);
+        }
+
+        @Test
+        @DisplayName("both tokens survive a round trip")
+        void tokensRoundTrip() {
+            store.saveConnection(connection("access-token-value", "refresh-token-value"));
+
+            var found = store.findConnection("acct-1", "d1").orElseThrow();
+
+            // Sealing twice produces two data keys. Keeping only the first one is how the
+            // refresh token spent a while being written and never readable — the ciphertext was
+            // there and the key that made it had been thrown away.
+            assertThat(found.accessToken().reveal()).isEqualTo("access-token-value");
+            assertThat(found.refreshToken().reveal()).isEqualTo("refresh-token-value");
+            assertThat(found.kind()).isEqualTo(SessionStore.Connection.Kind.OAUTH);
+        }
+
+        @Test
+        @DisplayName("a connection with no refresh token reads back without one")
+        void refreshIsOptional() {
+            store.saveConnection(connection("access-only", null));
+
+            var found = store.findConnection("acct-1", "d1").orElseThrow();
+
+            assertThat(found.accessToken().reveal()).isEqualTo("access-only");
+            assertThat(found.refreshToken()).isNull();
+            assertThat(found.isRenewable()).isFalse();
+        }
+
+        @Test
+        @DisplayName("re-authorizing replaces both tokens, not just the one")
+        void reauthorizationReplacesBoth() {
+            store.saveConnection(connection("first-access", "first-refresh"));
+            store.saveConnection(connection("second-access", "second-refresh"));
+
+            var found = store.findConnection("acct-1", "d1").orElseThrow();
+
+            // A refresh rotates the refresh token too, so an update that renewed one and left
+            // the other would leave a pair that no longer belongs together.
+            assertThat(found.accessToken().reveal()).isEqualTo("second-access");
+            assertThat(found.refreshToken().reveal()).isEqualTo("second-refresh");
+        }
+
+        @Test
+        @DisplayName("a token is not readable in the database")
+        void tokensAreEncryptedAtRest() throws SQLException {
+            store.saveConnection(connection("SUPER-SECRET-ACCESS", "SUPER-SECRET-REFRESH"));
+
+            try (Connection sql = dataSource.getConnection();
+                 Statement statement = sql.createStatement();
+                 var rows = statement.executeQuery(
+                         "SELECT encode(access_token_enc,'escape')||' '"
+                                 + "||encode(refresh_token_enc,'escape') FROM jira_connection")) {
+                assertThat(rows.next()).isTrue();
+                // A readable access token is that person's Jira access; a readable refresh token
+                // is that access renewed indefinitely.
+                assertThat(rows.getString(1)).doesNotContain("SUPER-SECRET");
+            }
+        }
+
+        @Test
+        @DisplayName("a state value can be redeemed once and never again")
+        void statesAreSingleUse() {
+            store.rememberState("state-1", "/tickets", now.plusSeconds(600));
+
+            assertThat(store.redeemState("state-1")).contains("/tickets");
+            // Replaying a callback must not work twice: without this an attacker who observes
+            // one can have it redeemed into their own browser.
+            assertThat(store.redeemState("state-1")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("an expired state is not redeemable")
+        void expiredStatesAreRefused() {
+            store.rememberState("state-2", "/", now.minusSeconds(1));
+
+            assertThat(store.redeemState("state-2")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("a session ends when it is ended, and when it expires")
+        void sessionsEnd() {
+            store.createSession(new SessionStore.Session("sess-1", "acct-1", "Ada", null,
+                    "en_GB", now, now.plusSeconds(600)));
+            assertThat(store.findSession("sess-1")).isPresent();
+
+            store.endSession("sess-1");
+            assertThat(store.findSession("sess-1")).isEmpty();
+
+            store.createSession(new SessionStore.Session("sess-2", "acct-1", "Ada", null,
+                    "en_GB", now.minusSeconds(60), now.minusSeconds(1)));
+            assertThat(store.findSession("sess-2")).isEmpty();
+        }
+
+        private SessionStore.Connection connection(String access, String refresh) {
+            return new SessionStore.Connection("acct-1", "d1", "cloud-1",
+                    "https://acme.atlassian.net", null, SessionStore.Connection.Kind.OAUTH,
+                    SensitiveValue.of(access, "jira.accessToken"),
+                    refresh == null ? null : SensitiveValue.of(refresh, "jira.refreshToken"),
+                    now.plusSeconds(3600), "read:me read:jira-work", "OAUTH_3LO_NO_PKCE");
         }
     }
 

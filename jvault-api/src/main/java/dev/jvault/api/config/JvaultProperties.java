@@ -28,11 +28,11 @@ public record JvaultProperties(String tenant,
         baseUrl = baseUrl == null ? "http://localhost:8080" : baseUrl;
         jira = jira == null ? new Jira(null, null, null, null, null) : jira;
         storage = storage == null ? new Storage(null, null, null) : storage;
-        crypto = crypto == null ? new Crypto(null) : crypto;
+        crypto = crypto == null ? new Crypto(null, null) : crypto;
         policies = policies == null ? List.of() : List.copyOf(policies);
         kafka = kafka == null ? new Kafka(false, null, null, null, null) : kafka;
         oauth = oauth == null ? new Oauth(false, null, null, null, null, false, false, false) : oauth;
-        dev = dev == null ? new Dev(false, null, null) : dev;
+        dev = dev == null ? new Dev(false, null, null, null) : dev;
     }
 
     /**
@@ -66,7 +66,13 @@ public record JvaultProperties(String tenant,
     }
 
     /** @param keyRings the rings policies may name. A policy naming an absent ring fails loudly */
-    public record Crypto(List<String> keyRings) {
+    /**
+     * @param devPassphrase derives the in-process key rings instead of generating them randomly,
+     *                      so a restart can still read what the last run wrote. Development
+     *                      only, and unset by default: a deployment replaces the key manager
+     *                      rather than seeding it
+     */
+    public record Crypto(List<String> keyRings, String devPassphrase) {
 
         public Crypto {
             keyRings = keyRings == null || keyRings.isEmpty()
@@ -179,10 +185,28 @@ public record JvaultProperties(String tenant,
      *                         than all of them: the point of running the real authorization path
      *                         in development is to notice when it refuses something it should not
      */
-    public record Dev(boolean insecureAuth, String defaultUser, String bootstrapProject) {
+    public record Dev(boolean insecureAuth, String defaultUser, String bootstrapProject,
+                      List<String> bootstrapPrincipals) {
 
         public Dev {
             defaultUser = defaultUser == null ? "dev-user" : defaultUser;
+            bootstrapPrincipals = bootstrapPrincipals == null
+                    ? List.of() : List.copyOf(bootstrapPrincipals);
+        }
+
+        /**
+         * Everyone the development bootstrap grants rights to.
+         *
+         * <p>The header user plus anyone named explicitly — an Atlassian account id, once
+         * somebody has signed in that way. Listed rather than granted on sign-in, because
+         * "whoever authenticates gets rights" is not a development convenience, it is the
+         * absence of authorization.
+         */
+        public List<String> allBootstrapPrincipals() {
+            var all = new java.util.LinkedHashSet<String>();
+            all.add(defaultUser);
+            all.addAll(bootstrapPrincipals);
+            return List.copyOf(all);
         }
     }
 }

@@ -3,6 +3,8 @@ package dev.jvault.persistence;
 import dev.jvault.authz.session.SessionStore;
 import dev.jvault.crypto.text.SensitiveTextCipher;
 import dev.jvault.domain.common.SensitiveValue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -25,6 +27,8 @@ import java.util.Optional;
  * lifted into another row does not decrypt.
  */
 public final class JdbcSessionStore implements SessionStore {
+
+    private static final Logger log = LoggerFactory.getLogger(JdbcSessionStore.class);
 
     private final JdbcTemplate jdbc;
     private final SensitiveTextCipher cipher;
@@ -98,24 +102,29 @@ public final class JdbcSessionStore implements SessionStore {
 
     @Override
     public void saveConnection(Connection connection) {
-        // One envelope for both tokens: they belong to the same authorization and are revoked
-        // together, so splitting them across two keys would add ceremony and no isolation.
+        // Two secrets, two envelopes, two keys — and both keys stored. Sealing twice and
+        // keeping one wrapped key is how the refresh token spent a while being unreadable: the
+        // ciphertext was there and the key that made it was thrown away.
         String binding = connection.accountId() + "|" + connection.deploymentId();
         SensitiveTextCipher.Sealed access =
                 cipher.seal(keyRing, connection.accessToken(), binding);
-        byte[] refresh = connection.refreshToken() == null ? null
-                : cipher.seal(keyRing, connection.refreshToken(), binding).ciphertext();
+        SensitiveTextCipher.Sealed refresh = connection.refreshToken() == null ? null
+                : cipher.seal(keyRing, connection.refreshToken(), binding);
 
         int updated = jdbc.update("""
                         UPDATE jira_connection SET
                             cloud_id = ?, site_url = ?, auth_email = ?, credential_kind = ?,
                             key_ring = ?, kek_id = ?, wrapped_dek = ?,
-                            access_token_enc = ?, refresh_token_enc = ?, access_expires_at = ?,
+                            access_token_enc = ?, refresh_token_enc = ?,
+                            refresh_kek_id = ?, refresh_wrapped_dek = ?, access_expires_at = ?,
                             scopes = ?, flow_used = ?, updated_at = ?
                         WHERE account_id = ? AND deployment_id = ?""",
                 connection.cloudId(), connection.siteUrl(), connection.authEmail(),
                 connection.kind().name(), keyRing, access.kekId(),
-                access.wrappedKey(), access.ciphertext(), refresh,
+                access.wrappedKey(), access.ciphertext(),
+                refresh == null ? null : refresh.ciphertext(),
+                refresh == null ? null : refresh.kekId(),
+                refresh == null ? null : refresh.wrappedKey(),
                 Timestamp.from(connection.accessExpiresAt()), connection.grantedScopes(),
                 connection.flowUsed(), Timestamp.from(Instant.now()),
                 connection.accountId(), connection.deploymentId());
@@ -126,19 +135,24 @@ public final class JdbcSessionStore implements SessionStore {
     }
 
     private void insertConnection(Connection connection, SensitiveTextCipher.Sealed access,
-                                  byte[] refresh) {
+                                  SensitiveTextCipher.Sealed refresh) {
         try {
             jdbc.update("""
                             INSERT INTO jira_connection (
                                 account_id, deployment_id, cloud_id, site_url, auth_email,
                                 credential_kind, key_ring, kek_id, wrapped_dek,
                                 access_token_enc, refresh_token_enc,
+                                refresh_kek_id, refresh_wrapped_dek,
                                 access_expires_at, scopes, flow_used, connected_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     connection.accountId(), connection.deploymentId(), connection.cloudId(),
                     connection.siteUrl(), connection.authEmail(), connection.kind().name(),
                     keyRing, access.kekId(), access.wrappedKey(),
-                    access.ciphertext(), refresh, Timestamp.from(connection.accessExpiresAt()),
+                    access.ciphertext(),
+                    refresh == null ? null : refresh.ciphertext(),
+                    refresh == null ? null : refresh.kekId(),
+                    refresh == null ? null : refresh.wrappedKey(),
+                    Timestamp.from(connection.accessExpiresAt()),
                     connection.grantedScopes(), connection.flowUsed(),
                     Timestamp.from(Instant.now()), Timestamp.from(Instant.now()));
         } catch (DuplicateKeyException e) {
@@ -147,14 +161,25 @@ public final class JdbcSessionStore implements SessionStore {
         }
     }
 
+    /**
+     * The connection, if its credentials can still be read.
+     *
+     * <p>A token encrypted under a key that no longer exists is not a broken server, it is a
+     * connection nobody can use — so it reads as absent and the person is asked to connect Jira
+     * again. Throwing turns one dead row into a 500 on every request that touches it, which is
+     * what it did.
+     */
     @Override
     public Optional<Connection> findConnection(String accountId, String deploymentId) {
         String binding = accountId + "|" + deploymentId;
 
-        List<Connection> found = jdbc.query("""
+        List<Connection> found;
+        try {
+            found = jdbc.query("""
                         SELECT account_id, deployment_id, cloud_id, site_url, auth_email,
                                credential_kind, key_ring, kek_id,
                                wrapped_dek, access_token_enc, refresh_token_enc,
+                               refresh_kek_id, refresh_wrapped_dek,
                                access_expires_at, scopes, flow_used
                         FROM jira_connection WHERE account_id = ? AND deployment_id = ?""",
                 (rs, rowNum) -> {
@@ -173,13 +198,22 @@ public final class JdbcSessionStore implements SessionStore {
                             open(ring, kekId, wrapped, rs.getBytes("access_token_enc"), binding,
                                     "jira.accessToken"),
                             refreshBytes == null ? null
-                                    : open(ring, kekId, wrapped, refreshBytes, binding,
-                                            "jira.refreshToken"),
+                                    : open(ring, rs.getString("refresh_kek_id"),
+                                            rs.getBytes("refresh_wrapped_dek"), refreshBytes,
+                                            binding, "jira.refreshToken"),
                             rs.getTimestamp("access_expires_at").toInstant(),
                             rs.getString("scopes"),
                             rs.getString("flow_used"));
                 },
                 accountId, deploymentId);
+        } catch (SensitiveTextCipher.SealingException
+                 | dev.jvault.crypto.kms.KeyManagementService.KeyUnwrapException e) {
+            // Identifiers only: which account, which deployment. Never what could not be opened.
+            log.error("The stored Jira credentials for {} on {} could not be decrypted; treating "
+                    + "the connection as absent so the person is asked to connect again.",
+                    accountId, deploymentId, e);
+            return Optional.empty();
+        }
 
         return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }

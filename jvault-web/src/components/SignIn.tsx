@@ -152,6 +152,7 @@ function signInMessage(reason: string, t: ReturnType<typeof useT>['t']): string 
     case 'nosites':
       return t.signInNoSites;
     case 'exchange':
+    case 'scopes':
       return t.signInMisconfigured;
     default:
       return t.signInFailed;

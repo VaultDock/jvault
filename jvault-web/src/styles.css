@@ -963,6 +963,41 @@ button:focus-visible {
   font-weight: 650;
 }
 
+.result__sub {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.result__waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
 .result dl {
   display: grid;
   grid-template-columns: max-content 1fr;

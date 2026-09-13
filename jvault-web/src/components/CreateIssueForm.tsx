@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { FormDefinition, FormField, TicketResponse } from '../api/types';
 import { useT } from '../i18n';
@@ -237,26 +237,64 @@ function CreatedTicket({
 }) {
   const { t } = useT();
   const failed = files.filter((pending) => pending.status === 'failed');
+
+  // The Jira issue is created from the outbox a moment after the ticket, so the response that
+  // gets us here never carries an issue key. Without this the panel says "being created" until
+  // somebody thinks to go and look, which is the opposite of telling them the number.
+  const [settled, setSettled] = useState(ticket);
+
+  useEffect(() => {
+    if (settled.issueKey || settled.state === 'FAILED') {
+      return;
+    }
+    const timer = setInterval(() => {
+      api
+        .ticket(ticket.ticketRef)
+        .then((latest) => setSettled(latest))
+        // A poll that fails changes nothing: the ticket exists either way, and the next tick
+        // will ask again.
+        .catch(() => undefined);
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [ticket.ticketRef, settled.issueKey, settled.state]);
   return (
     <div className="result">
       <div className="result__head">
-        <span className="result__tick">
-          <CheckIcon />
+        <span className={`result__tick${settled.state === 'FAILED' ? ' is-failed' : ''}`}>
+          {settled.state === 'FAILED' ? <AlertIcon /> : <CheckIcon />}
         </span>
-        <h2>{t.created}</h2>
+        {/* The number, as large as the word. It is what somebody came here to be told. */}
+        <h2>{settled.issueKey ?? (settled.state === 'FAILED' ? t.notInJira : t.created)}</h2>
+        {settled.issueKey ? <span className="result__sub">{t.created}</span> : null}
       </div>
+
+      {!settled.issueKey && settled.state !== 'FAILED' ? (
+        <p className="result__waiting">
+          <span className="spinner" aria-hidden="true" />
+          {t.beingCreated}
+        </p>
+      ) : null}
+
+      {settled.state === 'FAILED' ? (
+        <p className="notice notice--error" role="alert">
+          <AlertIcon />
+          <span>{t.jiraRejected}</span>
+        </p>
+      ) : null}
 
       <dl>
         <dt>{t.ticket}</dt>
-        <dd>{ticket.ticketRef}</dd>
+        <dd>{settled.ticketRef}</dd>
         <dt>{t.state}</dt>
         {/* A ticket can exist before its Jira issue does: the write is dispatched from the
             outbox, so "accepted, not yet in Jira" is a real and ordinary state to be in. */}
         <dd>
-          <span className="pill">{ticket.state}</span>
+          <span className="pill">{settled.state}</span>
         </dd>
-        <dt>{t.jiraIssue}</dt>
-        <dd>{ticket.issueKey ?? t.beingCreated}</dd>
+        <dt>{t.ticketView}</dt>
+        <dd>
+          <a href={`/t/${settled.ticketRef}`}>{t.openTicketView}</a>
+        </dd>
       </dl>
 
       {failed.length > 0 ? (

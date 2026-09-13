@@ -115,22 +115,31 @@ public class AuthController {
             return redirectTo("/?signin=expired");
         }
 
+        // Each step is named separately. Reporting all three as "the exchange failed" sent the
+        // first investigation of this at the client secret, when the exchange had worked and it
+        // was a missing scope two calls later.
         JiraOAuthClient.Tokens tokens;
+        try {
+            tokens = oauth.exchangeCode(code);
+        } catch (JiraOAuthClient.OAuthException e) {
+            log.error("Exchanging the authorization code failed. The usual causes are a client "
+                    + "secret that does not match the client id, and a redirect URI that differs "
+                    + "from the one registered in the developer console.", e);
+            return redirectTo("/?signin=exchange");
+        }
+
         JiraOAuthClient.AtlassianAccount account;
         List<JiraOAuthClient.AccessibleSite> sites;
         try {
-            tokens = oauth.exchangeCode(code);
             account = oauth.accountOf(tokens.accessToken());
             sites = oauth.accessibleSites(tokens.accessToken());
         } catch (JiraOAuthClient.OAuthException e) {
-            // This arrives in a browser following a redirect, so it has to end at a page rather
-            // than as a problem document nobody can act on. The usual causes are a client secret
-            // that does not match the client id and a redirect URI that does not match the one
-            // registered — both configuration, both invisible from the response.
-            log.error("The Atlassian token exchange failed. Check that the client secret matches "
-                    + "the client id, and that the callback registered in the developer console "
-                    + "is exactly the configured redirect URI.", e);
-            return redirectTo("/?signin=exchange");
+            // The token is valid and does not carry what jvault needs. Almost always a scope
+            // that was not requested, or one the app is not configured to grant.
+            log.error("The access token was issued but could not be used to identify the account "
+                    + "or list its Jira sites. Check that the app grants every requested scope.",
+                    e);
+            return redirectTo("/?signin=scopes");
         }
         if (sites.isEmpty()) {
             // Consent succeeded and reaches no Jira. Saying so beats a session that fails later

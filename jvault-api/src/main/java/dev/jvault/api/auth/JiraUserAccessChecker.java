@@ -119,18 +119,29 @@ public final class JiraUserAccessChecker implements ContentAuthorizationService.
                     HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 401 || response.statusCode() == 403) {
-                // Jira's answer, not a fault: this person cannot see this project.
+                // Two very different things arrive here: Jira saying this person cannot see the
+                // project, and Jira saying the token is not allowed to ask. Both deny, and only
+                // the second is somebody's mistake to fix — so the status is logged rather than
+                // collapsed into a silent refusal.
+                log.warn("Jira answered {} when asked whether {} may browse {}. If this is 403 "
+                        + "for a project the person can plainly see, the token is missing the "
+                        + "scope that permits the permissions endpoint.",
+                        response.statusCode(), user.externalId(), projectKey);
                 return Access.DENIED;
             }
             if (response.statusCode() / 100 != 2) {
+                log.warn("Jira answered {} asking about {} on {}", response.statusCode(),
+                        user.externalId(), projectKey);
                 return Access.UNAVAILABLE;
             }
 
             JsonNode permission = JSON.readTree(response.body())
                     .path("permissions").path("BROWSE_PROJECTS");
-            return permission.path("havePermission").asBoolean(false)
-                    ? Access.ALLOWED
-                    : Access.DENIED;
+            if (!permission.path("havePermission").asBoolean(false)) {
+                log.info("Jira says {} may not browse {}", user.externalId(), projectKey);
+                return Access.DENIED;
+            }
+            return Access.ALLOWED;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return Access.UNAVAILABLE;

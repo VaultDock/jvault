@@ -155,9 +155,23 @@ public class JvaultConfiguration {
     @Bean
     public KeyManagementService keyManagementService(JvaultProperties properties) {
         List<String> rings = properties.crypto().keyRings();
-        log.warn("Using the in-process key manager with rings {}. Keys live in this JVM's memory, "
-                + "so encryption at rest protects against a stolen disk and nothing else. "
-                + "Replace this bean before storing anything real.", rings);
+        String passphrase = properties.crypto().devPassphrase();
+
+        if (passphrase != null && !passphrase.isBlank()) {
+            // Derived rather than random, so a restart can still read what the last run wrote.
+            // Without this every restart turns every stored credential and document into
+            // ciphertext nobody can open — which presents as a dozen unrelated bugs.
+            log.warn("Using the in-process key manager with rings {}, derived from a "
+                    + "configured passphrase. The keys are as strong as that passphrase and "
+                    + "live in this JVM's memory. Development only.", rings);
+            return LocalKeyManagementService.withDerivedKeyRings(passphrase,
+                    rings.toArray(String[]::new));
+        }
+
+        log.warn("Using the in-process key manager with rings {}. Keys are random and live in "
+                + "this JVM's memory, so nothing stored survives a restart and encryption at "
+                + "rest protects against a stolen disk and nothing else. Replace this bean "
+                + "before storing anything real.", rings);
         return LocalKeyManagementService.withKeyRings(rings.toArray(String[]::new));
     }
 
@@ -412,19 +426,21 @@ public class JvaultConfiguration {
             String spaceId = properties.jira().deploymentId() + "/"
                     + properties.dev().bootstrapProject();
             Scope space = Scope.space(spaceId);
-            Principal user = Principal.user(properties.dev().defaultUser());
 
-            boolean alreadyGranted = acl.grantsAt(space).stream()
-                    .anyMatch(existing -> existing.principal().equals(user));
-            if (alreadyGranted) {
-                return;
+            for (String principalId : properties.dev().allBootstrapPrincipals()) {
+                Principal user = Principal.user(principalId);
+                boolean alreadyGranted = acl.grantsAt(space).stream()
+                        .anyMatch(existing -> existing.principal().equals(user));
+                if (alreadyGranted) {
+                    continue;
+                }
+                acl.save(new Grant(UUID.randomUUID(), space, user,
+                        Set.of(Permission.VIEW, Permission.CREATE, Permission.EDIT,
+                                Permission.DOWNLOAD),
+                        false, 0, null, null, null, clock.instant()));
+                log.warn("Granted {} full rights on {} because jvault.dev.bootstrap-project "
+                        + "is set.", user, spaceId);
             }
-            acl.save(new Grant(UUID.randomUUID(), space, user,
-                    Set.of(Permission.VIEW, Permission.CREATE, Permission.EDIT,
-                            Permission.DOWNLOAD),
-                    false, 0, null, null, null, clock.instant()));
-            log.warn("Granted {} full rights on {} because jvault.dev.bootstrap-project is set.",
-                    user, spaceId);
         };
     }
 

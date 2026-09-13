@@ -23,6 +23,10 @@ jvault:
     route: fs-local
     root: /tmp/jvault-dev/content
   crypto:
+    # Derives the development keys so that a restart can still read what the last run wrote.
+    # Without it every restart makes every stored token and document unreadable, which looks
+    # like a dozen unrelated failures rather than one expected consequence.
+    dev-passphrase: ${JVAULT_DEV_PASSPHRASE:jvault-development-only}
     key-rings:
       - default
       - sec-restricted
@@ -76,3 +80,8 @@ jvault:
     insecure-auth: true
     default-user: dev-user
     bootstrap-project: KAN
+    # Signing in with Atlassian makes your account id the principal, and a fresh identity has no
+    # grants. Named here rather than granted on sign-in: "whoever authenticates gets rights" is
+    # not a development convenience, it is the absence of authorization.
+    bootstrap-principals:
+      - "712020:8e1dc606-e005-43bf-8d1b-0e02b229731b"

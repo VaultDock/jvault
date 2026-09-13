@@ -209,6 +209,7 @@ describe('CreateIssueForm', () => {
 
   it('shows the ticket before Jira has an issue key for it', async () => {
     vi.spyOn(api, 'createTicket').mockResolvedValue(created);
+    vi.spyOn(api, 'ticket').mockResolvedValue(created);
     render(<CreateIssueForm definition={definition} deploymentId="d1" />);
 
     await userEvent.type(screen.getByLabelText(/Summary/), 'x');
@@ -218,6 +219,33 @@ describe('CreateIssueForm', () => {
     // ordinary state rather than a failure to hide.
     await screen.findByText('tkt-1');
     expect(screen.getByText('being created')).toBeDefined();
-    expect(screen.getByRole('link', { name: 'open' }).getAttribute('href')).toBe('/c/ct-1');
+  });
+
+  it('shows the Jira issue key as soon as the outbox has created it', async () => {
+    vi.spyOn(api, 'createTicket').mockResolvedValue(created);
+    // The create response never carries a key: the issue does not exist when it returns.
+    const poll = vi
+      .spyOn(api, 'ticket')
+      .mockResolvedValue({ ...created, state: 'ACTIVE', issueKey: 'KAN-42' });
+
+    render(<CreateIssueForm definition={definition} deploymentId="d1" />);
+    await userEvent.type(screen.getByLabelText(/Summary/), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    // The number is what somebody came here to be told, so the panel waits for it rather than
+    // leaving them to go and look.
+    expect(await screen.findByText('KAN-42', {}, { timeout: 5000 })).toBeDefined();
+    expect(poll).toHaveBeenCalledWith('tkt-1');
+  });
+
+  it('says so when Jira refuses the ticket, instead of waiting forever', async () => {
+    vi.spyOn(api, 'createTicket').mockResolvedValue(created);
+    vi.spyOn(api, 'ticket').mockResolvedValue({ ...created, state: 'FAILED', issueKey: null });
+
+    render(<CreateIssueForm definition={definition} deploymentId="d1" />);
+    await userEvent.type(screen.getByLabelText(/Summary/), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    expect(await screen.findByText(/Jira refused/, {}, { timeout: 5000 })).toBeDefined();
   });
 });
