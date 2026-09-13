@@ -13,7 +13,6 @@ import dev.jvault.content.ContentRecord;
 import dev.jvault.content.ContentService;
 import dev.jvault.content.PartDescriptor;
 import dev.jvault.content.TicketRecord;
-import dev.jvault.content.TicketRepository;
 import dev.jvault.content.support.InMemoryContentMetadataRepository;
 import dev.jvault.content.support.InMemoryTicketRepository;
 import dev.jvault.crypto.envelope.ContentCipher;
@@ -26,10 +25,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -57,8 +52,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * The content endpoint, which is where several of the design's promises become observable
  * behaviour rather than prose.
  */
-@SpringBootTest(classes = {JvaultApiApplication.class,
-        ContentAccessControllerTest.TestBeans.class})
 class ContentAccessControllerTest {
 
     private static final String SECRET = "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENGbPxRfiCY";
@@ -70,27 +63,28 @@ class ContentAccessControllerTest {
     private static final Principal RESPONDERS = Principal.group("sec-responders");
     private static final Principal MALLORY = Principal.user("mallory");
 
-    @Autowired
-    private ContentAccessController controller;
-    @Autowired
-    private ContentService contentService;
-    @Autowired
-    private TicketRepository tickets;
-    @Autowired
-    private TestBeans.MutableCallerResolver callers;
-    @Autowired
-    private TestBeans.RecordingAuditor auditor;
-    @Autowired
-    private TestBeans.TestAcl acl;
-    @Autowired
-    private TestBeans.TestJira jira;
+    private final TestBeans.TestAcl acl = new TestBeans.TestAcl();
+    private final TestBeans.TestJira jira = new TestBeans.TestJira();
+    private final TestBeans.MutableCallerResolver callers = new TestBeans.MutableCallerResolver();
+    private final TestBeans.RecordingAuditor auditor = new TestBeans.RecordingAuditor();
+    private final InMemoryTicketRepository tickets = new InMemoryTicketRepository();
 
+    private ContentService contentService;
     private MockMvc mvc;
     private String contentRef;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        var beans = new TestBeans();
+        var clock = beans.clock();
+        var metadata = beans.contentMetadata();
+        contentService = beans.contentService(metadata, clock);
+        var authorization = beans.authorization(acl, jira, clock);
+
+        var controller = new ContentAccessController(contentService, tickets, authorization,
+                callers, auditor, "/api/v1/jira/connections/start");
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
+
         acl.reset();
         auditor.reset();
         jira.allow(true);
@@ -332,25 +326,20 @@ class ContentAccessControllerTest {
         }
     }
 
-    @TestConfiguration
     static class TestBeans {
 
-        @Bean
         Clock clock() {
             return Clock.fixed(Instant.parse("2026-09-11T09:41:12Z"), ZoneOffset.UTC);
         }
 
-        @Bean
         InMemoryTicketRepository ticketRepository() {
             return new InMemoryTicketRepository();
         }
 
-        @Bean
         InMemoryContentMetadataRepository contentMetadata() {
             return new InMemoryContentMetadataRepository();
         }
 
-        @Bean
         ContentService contentService(InMemoryContentMetadataRepository metadata, Clock clock)
                 throws Exception {
             Path root = Files.createTempDirectory("jvault-api-test");
@@ -360,17 +349,14 @@ class ContentAccessControllerTest {
                     ContentService.IdGenerator.random(), clock, "acme", root.resolve("spool"));
         }
 
-        @Bean
         TestAcl acl() {
             return new TestAcl();
         }
 
-        @Bean
         TestJira jira() {
             return new TestJira();
         }
 
-        @Bean
         ContentAuthorizationService authorization(TestAcl acl, TestJira jira, Clock clock) {
             return new ContentAuthorizationService(acl, jira,
                     new ContentAuthorizationService.SpaceSettings() {
@@ -386,12 +372,10 @@ class ContentAccessControllerTest {
                     }, clock);
         }
 
-        @Bean
         MutableCallerResolver callerResolver() {
             return new MutableCallerResolver();
         }
 
-        @Bean
         RecordingAuditor auditor() {
             return new RecordingAuditor();
         }

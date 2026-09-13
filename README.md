@@ -67,7 +67,7 @@ range requests and version history.
 
 ## Implementation status
 
-Java 21, Maven multi-module. `mvn test` — 389 tests green, 7 skipped.
+Java 21, Maven multi-module. `mvn test` — 402 tests green, 7 skipped.
 
 > **There is no user interface yet.** Everything built so far is backend. The React SPA is
 > still unstarted, and its first dependency is the ADF-editor spike in
@@ -93,7 +93,7 @@ Java 21, Maven multi-module. `mvn test` — 389 tests green, 7 skipped.
 | `jvault-content` | Ticket creation and amendment, content service, surrogates, payload assembler | **Create, comment and attach done**; edit and delete not started |
 | `jvault-ingest` | Event mapping, processing state machine, deduplication, dead-lettering | **Processing core done**; Kafka client adapter, schema registry and retry topics not started |
 | `jvault-authz` | Permissions, inheritance, delegation, Jira-permission combination | **Decision logic done**; persistence adapter and decision cache not started |
-| `jvault-api` | Content endpoint and the permanent link, RFC 9457 errors | **Content access done**; ticket endpoints, idempotency filter, OIDC and OpenAPI not started |
+| `jvault-api` | Content endpoint, ticket endpoints, idempotency, RFC 9457 errors | **Create, read and idempotency done**; metadata proxy, OIDC and OpenAPI not started |
 
 Built in this order deliberately: these are the pieces
 [15. Implementation plan](docs/15-implementation-plan.md) identifies as expensive to retrofit,
@@ -130,6 +130,8 @@ and none of them depends on the unanswered Q0 connectivity question.
 | Large content never sits in memory | Ciphertext spools to a temporary file and streams into the backend; an 8 MB attachment is covered by test, and the spool is emptied afterwards |
 | Possession of a link grants nothing | Enforced end to end at `/c/{contentRef}`: anonymous gets 401, a stranger holding the exact reference gets 404, and a revoked grant or lost Jira access stops working on the very next request |
 | Outsiders cannot enumerate content | A real reference and an invented one return byte-identical 404s to someone outside the space; a 403 is reserved for people who already know the content exists |
+| A creating POST is safe to repeat | `Idempotency-Key` replays the original response, refuses the same key with a different body, and is scoped per caller so two clients picking `retry-1` cannot read each other's responses. A failed attempt releases the key, because the caller is expected to retry with it |
+| No error response echoes the request | Validation names the field and a code; a malformed body is refused without Jackson's message, which quotes the offending input; the catch-all sends nothing from the exception at all. Tests submit a credential in a neighbouring field and assert it appears in none of them |
 | Responses reveal nothing extra | Metadata carries no filename, no backend name, no object key and no key material; downloads are `no-store`; the filename appears only in a `Content-Disposition` the caller has just been authorized for |
 | Neither system can bypass the other | `INTERSECT` is the default: a Jira user without a vault grant is denied, and a vault grant without Jira access is denied. The other three modes exist but declare that they need explicit acknowledgement |
 | A Jira outage is not a denial | An unavailable dependency returns `UNAVAILABLE`, not `DENY`, so a user is told the check cannot be made rather than that they have lost access. A per-space grace window may reuse a previously granted decision — never manufacture one, never for writes |
