@@ -3,6 +3,14 @@ import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect } from 'react';
 import { toAdf } from '../adf/toAdf';
+import {
+  BoldIcon,
+  BulletIcon,
+  CodeIcon,
+  ItalicIcon,
+  NumberedIcon,
+  QuoteIcon,
+} from './icons';
 
 /**
  * The rich-text control.
@@ -19,21 +27,25 @@ export function RichTextField({
   value,
   onChange,
   editable,
+  id,
 }: {
   value: string;
   onChange: (adfJson: string) => void;
   editable: boolean;
+  /** Put on the editable element itself, so the field's <label for> actually focuses it. */
+  id?: string | undefined;
 }) {
   const editor = useEditor({
     editable,
     extensions: [
-      StarterKit.configure({
-        // Neither has an ADF equivalent jvault emits, so neither is offered.
-        horizontalRule: {},
-        codeBlock: {},
-      }),
+      StarterKit,
       Link.configure({ openOnClick: false, autolink: true, protocols: ['http', 'https', 'mailto'] }),
     ],
+    editorProps: {
+      // A label whose `for` names no element is a label that does nothing when clicked, which is
+      // how this started: the editor is a contenteditable div, not an input.
+      attributes: id ? { id, role: 'textbox', 'aria-multiline': 'true' } : {},
+    },
     onUpdate: ({ editor: current }) => onChange(JSON.stringify(toAdf(current.getJSON()))),
   });
 
@@ -61,31 +73,12 @@ type EditorInstance = NonNullable<ReturnType<typeof useEditor>>;
 
 function Toolbar({ editor, disabled }: { editor: EditorInstance; disabled: boolean }) {
   const actions = [
-    { label: 'B', title: 'Bold', run: () => editor.chain().focus().toggleBold().run(), mark: 'bold' },
-    {
-      label: 'I',
-      title: 'Italic',
-      run: () => editor.chain().focus().toggleItalic().run(),
-      mark: 'italic',
-    },
-    {
-      label: '•',
-      title: 'Bullet list',
-      run: () => editor.chain().focus().toggleBulletList().run(),
-      mark: 'bulletList',
-    },
-    {
-      label: '1.',
-      title: 'Numbered list',
-      run: () => editor.chain().focus().toggleOrderedList().run(),
-      mark: 'orderedList',
-    },
-    {
-      label: '<>',
-      title: 'Code block',
-      run: () => editor.chain().focus().toggleCodeBlock().run(),
-      mark: 'codeBlock',
-    },
+    { title: 'Bold', icon: <BoldIcon />, mark: 'bold', run: () => editor.chain().focus().toggleBold().run() },
+    { title: 'Italic', icon: <ItalicIcon />, mark: 'italic', run: () => editor.chain().focus().toggleItalic().run() },
+    { title: 'Bullet list', icon: <BulletIcon />, mark: 'bulletList', run: () => editor.chain().focus().toggleBulletList().run() },
+    { title: 'Numbered list', icon: <NumberedIcon />, mark: 'orderedList', run: () => editor.chain().focus().toggleOrderedList().run() },
+    { title: 'Quote', icon: <QuoteIcon />, mark: 'blockquote', run: () => editor.chain().focus().toggleBlockquote().run() },
+    { title: 'Code block', icon: <CodeIcon />, mark: 'codeBlock', run: () => editor.chain().focus().toggleCodeBlock().run() },
   ];
 
   return (
@@ -95,11 +88,13 @@ function Toolbar({ editor, disabled }: { editor: EditorInstance; disabled: boole
           key={action.title}
           type="button"
           title={action.title}
+          aria-label={action.title}
           disabled={disabled}
           aria-pressed={editor.isActive(action.mark)}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={action.run}
         >
-          {action.label}
+          {action.icon}
         </button>
       ))}
     </div>

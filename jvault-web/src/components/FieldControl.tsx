@@ -1,5 +1,5 @@
 import type { FormField } from '../api/types';
-import { PlacementBadge, SupportNotice } from './PlacementBadge';
+import { FieldHint, PlacementBadge, SupportBadge } from './PlacementBadge';
 import { RichTextField } from './RichTextField';
 
 /**
@@ -23,35 +23,49 @@ export function FieldControl({
   const editable = field.supportLevel !== 'READ_ONLY';
   const id = `field-${field.key}`;
 
-  return (
-    <div className={`field${error ? ' field--error' : ''}`}>
-      <label htmlFor={id}>
-        {field.name}
-        {field.required ? <span className="field__required" aria-label="required"> *</span> : null}
-      </label>
+  const classes = ['field'];
+  if (field.placement !== 'JIRA') {
+    classes.push('field--external');
+  }
+  if (error) {
+    classes.push('field--invalid');
+  }
 
-      <div className="field__annotations">
+  return (
+    <div className={classes.join(' ')}>
+      <div className="field__head">
+        <label className="field__label" htmlFor={id}>
+          {field.name}
+          {field.required ? (
+            <span className="field__required" aria-label="required">
+              *
+            </span>
+          ) : null}
+        </label>
         <PlacementBadge field={field} />
-        <SupportNotice field={field} />
+        <SupportBadge field={field} />
+        {field.key.startsWith('customfield_') ? (
+          // The label of a custom field is whoever named it; the key is what the API call uses.
+          <span className="field__key">{field.key}</span>
+        ) : null}
       </div>
 
       {renderControl(field, id, value, editable, onChange)}
 
-      {field.hasMoreOptions ? (
-        // Truncated rather than complete, and saying so beats a list that quietly omits the
-        // value someone is looking for.
-        <span className="notice">
-          Showing the first options only. Type the exact value if it is not listed.
-        </span>
-      ) : null}
+      <FieldHint field={field} />
 
       {error ? (
-        <span className="field__errorText" role="alert">
+        <span className="field__error" role="alert">
           {error}
         </span>
       ) : null}
     </div>
   );
+}
+
+/** The wire form is one comma-separated string; the control wants the pieces. */
+function splitValues(value: string): string[] {
+  return value === '' ? [] : value.split(',');
 }
 
 function renderControl(
@@ -70,14 +84,18 @@ function renderControl(
 
   switch (field.control) {
     case 'RICH_TEXT':
-      return <RichTextField value={value} onChange={onChange} editable={editable} />;
+      return (
+        <RichTextField value={value} onChange={onChange} editable={editable} id={id} />
+      );
 
     case 'SELECT':
     case 'MULTI_SELECT':
       return (
         <select
           {...common}
-          value={value}
+          // A multiple select is controlled by an array. Handed a string it silently shows
+          // nothing selected, which looks like the options failing to load.
+          value={field.control === 'MULTI_SELECT' ? splitValues(value) : value}
           multiple={field.control === 'MULTI_SELECT'}
           onChange={(event) =>
             onChange(
@@ -87,7 +105,7 @@ function renderControl(
             )
           }
         >
-          <option value="">—</option>
+          {field.control === 'MULTI_SELECT' ? null : <option value="">Choose…</option>}
           {field.allowedValues.map((option) => (
             <option key={option.id} value={option.id}>
               {option.value}

@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { FormDefinition, FormField, TicketResponse } from '../api/types';
 import { FieldControl } from './FieldControl';
+import { AlertIcon, CheckIcon, VaultIcon } from './icons';
+
+/** Answered by the context bar above the form, and carried in the request body. */
+const DECIDED_ABOVE = new Set(['project', 'issuetype']);
 
 type Status =
   | { kind: 'editing' }
@@ -25,13 +29,19 @@ export function CreateIssueForm({
   // should produce a second issue.
   const [attempt, setAttempt] = useState(() => crypto.randomUUID());
 
-  const editable = useMemo(
-    () => definition.fields.filter((field) => field.supportLevel !== 'READ_ONLY'),
+  // Project and issue type are chosen above the form and travel in the request itself. Asking
+  // for them again as required fields makes the form look broken to anyone who already answered.
+  const shown = useMemo(
+    () => definition.fields.filter((field) => !DECIDED_ABOVE.has(field.key)),
     [definition],
   );
+  const editable = useMemo(
+    () => shown.filter((field) => field.supportLevel !== 'READ_ONLY'),
+    [shown],
+  );
   const external = useMemo(
-    () => definition.fields.filter((field) => field.placement !== 'JIRA'),
-    [definition],
+    () => shown.filter((field) => field.placement !== 'JIRA'),
+    [shown],
   );
 
   async function submit(event: React.FormEvent) {
@@ -72,41 +82,62 @@ export function CreateIssueForm({
   }
 
   if (status.kind === 'created') {
-    return <CreatedTicket ticket={status.ticket} onReset={() => {
-      setValues({});
-      setAttempt(crypto.randomUUID());
-      setStatus({ kind: 'editing' });
-    }} />;
+    return (
+      <CreatedTicket
+        ticket={status.ticket}
+        onReset={() => {
+          setValues({});
+          setAttempt(crypto.randomUUID());
+          setStatus({ kind: 'editing' });
+        }}
+      />
+    );
   }
 
   return (
     <form onSubmit={submit} noValidate>
-      {external.length > 0 ? (
-        <p className="summaryNotice">
-          {external.length === 1 ? 'One field on this form is' : `${external.length} fields on this form are`}{' '}
-          stored in jvault rather than in Jira. Each one is marked below.
-        </p>
-      ) : null}
+      <div className="form-body">
+        {external.length > 0 ? (
+          <p className="notice notice--vault">
+            <VaultIcon />
+            <span>
+              <strong>
+                {external.length === 1
+                  ? 'One field on this form is'
+                  : `${external.length} fields on this form are`}{' '}
+                stored in jvault rather than in Jira.
+              </strong>{' '}
+              Each is marked below. Jira sees a link; the text itself never leaves this system.
+            </span>
+          </p>
+        ) : null}
 
-      {definition.fields.map((field) => (
-        <FieldControl
-          key={field.key}
-          field={field}
-          value={values[field.key] ?? ''}
-          error={fieldErrors.get(field.key)}
-          onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
-        />
-      ))}
+        {status.kind === 'failed' ? (
+          <p className="notice notice--error" role="alert">
+            <AlertIcon />
+            <span>{status.message}</span>
+          </p>
+        ) : null}
 
-      {status.kind === 'failed' ? (
-        <p className="formError" role="alert">
-          {status.message}
-        </p>
-      ) : null}
+        {shown.map((field) => (
+          <FieldControl
+            key={field.key}
+            field={field}
+            value={values[field.key] ?? ''}
+            error={fieldErrors.get(field.key)}
+            onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
+          />
+        ))}
+      </div>
 
-      <button type="submit" disabled={status.kind === 'submitting'}>
-        {status.kind === 'submitting' ? 'Creating…' : 'Create'}
-      </button>
+      <div className="actions">
+        <button type="submit" className="btn-primary" disabled={status.kind === 'submitting'}>
+          {status.kind === 'submitting' ? 'Creating…' : 'Create'}
+        </button>
+        <span className="actions__note">
+          {shown.length} fields · {external.length} held in jvault
+        </span>
+      </div>
     </form>
   );
 }
@@ -125,15 +156,23 @@ function filled(fields: FormField[], values: Record<string, string>): Record<str
 
 function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: () => void }) {
   return (
-    <div className="created">
-      <h2>Created</h2>
+    <div className="result">
+      <div className="result__head">
+        <span className="result__tick">
+          <CheckIcon />
+        </span>
+        <h2>Created</h2>
+      </div>
+
       <dl>
         <dt>Ticket</dt>
         <dd>{ticket.ticketRef}</dd>
         <dt>State</dt>
         {/* A ticket can exist before its Jira issue does: the write is dispatched from the
             outbox, so "accepted, not yet in Jira" is a real and ordinary state to be in. */}
-        <dd>{ticket.state}</dd>
+        <dd>
+          <span className="pill">{ticket.state}</span>
+        </dd>
         <dt>Jira issue</dt>
         <dd>{ticket.issueKey ?? 'being created'}</dd>
       </dl>
@@ -141,10 +180,12 @@ function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: (
       {ticket.parts.length > 0 ? (
         <>
           <h3>Held in jvault</h3>
-          <ul>
+          <ul className="parts">
             {ticket.parts.map((part) => (
               <li key={part.contentRef}>
-                {part.fieldKey ?? part.partType} · {part.classification.toLowerCase()}{' '}
+                <VaultIcon />
+                <span className="parts__name">{part.fieldKey ?? part.partType}</span>
+                <span className="chip chip--class">{part.classification.toLowerCase()}</span>
                 {/* Not a capability. Following it is authorized afresh, so a link that reaches
                     the wrong person still shows them nothing. */}
                 <a href={part.link}>open</a>
@@ -154,7 +195,7 @@ function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: (
         </>
       ) : null}
 
-      <button type="button" onClick={onReset}>
+      <button type="button" className="btn-secondary" onClick={onReset}>
         Create another
       </button>
     </div>
