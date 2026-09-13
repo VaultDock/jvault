@@ -17,6 +17,8 @@ import dev.jvault.content.TicketRecord;
 import dev.jvault.content.ContentMetadataRepository;
 import dev.jvault.content.TicketRepository;
 import dev.jvault.jira.egress.JiraFieldEncoding;
+import dev.jvault.outbox.OutboxRepository;
+import dev.jvault.outbox.OutboxState;
 import dev.jvault.jira.gateway.UserDirectory;
 import dev.jvault.domain.placement.Placement;
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,6 +72,7 @@ public class TicketController {
     private final CallerResolver callers;
     private final IdempotencyService idempotency;
     private final LinkFactory links;
+    private final OutboxRepository outbox;
 
     public TicketController(TicketCreationService creation,
                             TicketRepository tickets,
@@ -78,7 +81,8 @@ public class TicketController {
                             ContentAuthorizationService authorization,
                             CallerResolver callers,
                             IdempotencyService idempotency,
-                            LinkFactory links) {
+                            LinkFactory links,
+                            OutboxRepository outbox) {
         this.creation = Objects.requireNonNull(creation, "creation");
         this.tickets = Objects.requireNonNull(tickets, "tickets");
         this.contentMetadata = Objects.requireNonNull(contentMetadata, "contentMetadata");
@@ -87,6 +91,7 @@ public class TicketController {
         this.callers = Objects.requireNonNull(callers, "callers");
         this.idempotency = Objects.requireNonNull(idempotency, "idempotency");
         this.links = Objects.requireNonNull(links, "links");
+        this.outbox = Objects.requireNonNull(outbox, "outbox");
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -187,7 +192,29 @@ public class TicketController {
         // a ticket view nobody would open. The content itself is not here — each part carries a
         // link, and following one is authorized separately and audited.
         return ResponseEntity.ok(TicketResponse.of(ticket,
-                contentMetadata.partsOf(ticket.ticketRef()), links, displayNamesFor(ticket)));
+                contentMetadata.partsOf(ticket.ticketRef()), links, displayNamesFor(ticket),
+                failureOf(ticket)));
+    }
+
+    /**
+     * Why a ticket is not in Jira, when it is not.
+     *
+     * <p>Read from the outbox rather than copied onto the ticket: the entry that failed is the
+     * thing that knows, and a second copy of the same fact is a second thing to keep in step.
+     *
+     * <p>Reported for anything not yet delivered, not only for a permanent failure. A create
+     * that has been retrying for an hour looks exactly like one that has not started, and the
+     * difference matters to whoever is waiting for it.
+     */
+    private TicketResponse.Failure failureOf(TicketRecord ticket) {
+        return outbox.findForTicket(ticket.ticketRef()).stream()
+                .filter(entry -> entry.lastErrorCode() != null
+                        && entry.state() != OutboxState.SUCCEEDED)
+                .findFirst()
+                .map(entry -> new TicketResponse.Failure(entry.operation().name(),
+                        entry.lastErrorCode(), entry.attempts(),
+                        entry.state() != OutboxState.ABANDONED))
+                .orElse(null);
     }
 
     /**
@@ -201,7 +228,7 @@ public class TicketController {
         var accountIds = new java.util.LinkedHashSet<String>();
         ticket.jiraFields().forEach((field, value) -> {
             if (value != null && !value.isBlank()
-                    && JiraFieldEncoding.forField(null, null, field)
+                    && JiraFieldEncoding.forField(null, null, null, field)
                             == JiraFieldEncoding.ACCOUNT_OBJECT) {
                 accountIds.add(value);
             }
@@ -308,20 +335,25 @@ public class TicketController {
      * @param fieldDisplayNames readable values for the fields whose stored value is an
      *                          identifier, keyed by that identifier. Absent for anything that
      *                          could not be resolved, which the client shows as the raw value
+     * @param failure           why the Jira write did not happen, or {@code null} while nothing
+     *                          has gone wrong. A ticket that says only FAILED tells its owner
+     *                          to go and find an administrator; one that says
+     *                          {@code JIRA_FIELD_VALIDATION:parent} tells them what to fix
      */
     public record TicketResponse(String ticketRef,
                                  String state,
                                  String issueKey,
                                  Map<String, String> jiraFields,
                                  Map<String, String> fieldDisplayNames,
+                                 Failure failure,
                                  List<Part> parts) {
 
         static TicketResponse of(TicketCreationService.Result result, LinkFactory links) {
-            return of(result.ticket(), result.storedParts(), links, Map.of());
+            return of(result.ticket(), result.storedParts(), links, Map.of(), null);
         }
 
         static TicketResponse of(TicketRecord ticket, List<ContentRecord> parts, LinkFactory links,
-                                 Map<String, String> displayNames) {
+                                 Map<String, String> displayNames, Failure failure) {
             var partResponses = new ArrayList<Part>();
             for (ContentRecord part : parts) {
                 partResponses.add(new Part(part.contentRef(), part.partType().name(),
@@ -330,7 +362,20 @@ public class TicketController {
             }
             return new TicketResponse(ticket.ticketRef(), ticket.state().name(),
                     ticket.jiraIssueKey(), new LinkedHashMap<>(ticket.jiraFields()),
-                    Map.copyOf(displayNames), List.copyOf(partResponses));
+                    Map.copyOf(displayNames), failure, List.copyOf(partResponses));
+        }
+
+        /**
+         * What went wrong, in the terms the outbox records it.
+         *
+         * <p>A code and the operation it belongs to, never a message from Jira: Jira's own error
+         * bodies quote the request back, and the request carries field values — which for a
+         * ticket in jvault is the one thing that must not travel.
+         *
+         * @param attempts how many times it has been tried, which is the difference between
+         *                 "this is retrying" and "this is not going to work"
+         */
+        public record Failure(String operation, String code, int attempts, boolean retrying) {
         }
 
         /**

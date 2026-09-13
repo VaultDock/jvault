@@ -42,6 +42,7 @@ const created = {
   issueKey: null,
   jiraFields: {},
   fieldDisplayNames: {},
+  failure: null,
   parts: [
     {
       contentRef: 'ct-1',

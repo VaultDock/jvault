@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api/client';
-import type { TicketResponse } from '../api/types';
+import type { TicketFailure, TicketResponse } from '../api/types';
 import { useJiraIssueUrl, useT } from '../i18n';
 import { AlertIcon, CheckIcon, LockIcon } from './icons';
 import { SecuredPart } from './SecuredPart';
@@ -39,6 +39,27 @@ function labelFor(field: string): string {
 }
 
 /** The way back. Jira links here; this links there. */
+/**
+ * What Jira objected to.
+ *
+ * <p>A state of FAILED sends its owner to find an administrator. A code naming the field sends
+ * them to the field. The code is Jira's objection as the outbox recorded it — never Jira's own
+ * message, which quotes the request back, and the request carries the field values.
+ */
+function WhyItFailed({ failure }: { failure: TicketFailure }) {
+  const { t } = useT();
+
+  return (
+    <div className={`notice notice--${failure.retrying ? 'warn' : 'error'}`} role="alert">
+      <AlertIcon />
+      <span>
+        {failure.retrying ? t.stillTrying(failure.attempts) : t.gaveUp}
+        <code className="notice__code">{failure.code}</code>
+      </span>
+    </div>
+  );
+}
+
 function JiraLink({ issueKey }: { issueKey: string | null }) {
   const { t } = useT();
   const url = useJiraIssueUrl(issueKey);
@@ -140,6 +161,8 @@ export function TicketView({ ticketRef }: { ticketRef: string }) {
               <span className="pill">{ticket.state}</span>
             </dd>
           </dl>
+
+          {ticket.failure ? <WhyItFailed failure={ticket.failure} /> : null}
 
           <h3>{t.heldInVault}</h3>
           {ticket.parts.length > 0 ? (

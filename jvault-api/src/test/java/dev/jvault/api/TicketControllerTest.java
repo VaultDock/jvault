@@ -1,5 +1,6 @@
 package dev.jvault.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.jvault.api.error.ApiExceptionHandler;
 import dev.jvault.api.idempotency.IdempotencyService;
@@ -29,6 +30,7 @@ import dev.jvault.domain.placement.PlacementPolicy;
 import dev.jvault.domain.placement.PolicySelector;
 import dev.jvault.domain.placement.PolicySet;
 import dev.jvault.domain.placement.SurrogateSpec;
+import dev.jvault.outbox.OutboxEntry;
 import dev.jvault.jira.gateway.UserDirectory;
 import dev.jvault.storage.filesystem.FilesystemContentStore;
 import jakarta.servlet.http.HttpServletRequest;
@@ -109,7 +111,7 @@ class TicketControllerTest {
 
         var controller = new TicketController(creation, tickets, metadata, directory(),
                 authorization, callerResolver(),
-                new IdempotencyService(new InMemoryIdempotencyStore(), clock), links);
+                new IdempotencyService(new InMemoryIdempotencyStore(), clock), links, outbox);
 
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new ApiExceptionHandler())
@@ -317,6 +319,46 @@ class TicketControllerTest {
 
             assertThat(JSON.readTree(body).get("ticketRef").asText()).isEqualTo(ref);
             assertThat(body).doesNotContain("AWS_SECRET_ACCESS_KEY");
+        }
+
+        @Test
+        @DisplayName("a ticket that will not reach Jira says what Jira objected to")
+        void reportsWhyTheWriteFailed() throws Exception {
+            grant(Permission.CREATE, Permission.VIEW);
+            String created = mvc.perform(post("/api/v1/tickets")
+                    .contentType("application/json").content(createRequest()))
+                    .andReturn().getResponse().getContentAsString();
+            String ref = JSON.readTree(created).get("ticketRef").asText();
+
+            OutboxEntry create = outbox.findByEffect(ref, "create-issue").orElseThrow();
+            outbox.save(create.abandoned("JIRA_FIELD_VALIDATION:parent"));
+
+            String body = mvc.perform(get("/api/v1/tickets/" + ref))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString();
+
+            // "FAILED" sends its owner to find an administrator. This sends them to the field.
+            JsonNode failure = JSON.readTree(body).get("failure");
+            assertThat(failure.get("code").asText()).isEqualTo("JIRA_FIELD_VALIDATION:parent");
+            assertThat(failure.get("operation").asText()).isEqualTo("CREATE_ISSUE");
+            assertThat(failure.get("retrying").asBoolean())
+                    .as("abandoned means nobody is going to try this again")
+                    .isFalse();
+        }
+
+        @Test
+        @DisplayName("a ticket on its way to Jira reports no failure")
+        void healthyTicketsCarryNoFailure() throws Exception {
+            grant(Permission.CREATE, Permission.VIEW);
+            String created = mvc.perform(post("/api/v1/tickets")
+                    .contentType("application/json").content(createRequest()))
+                    .andReturn().getResponse().getContentAsString();
+            String ref = JSON.readTree(created).get("ticketRef").asText();
+
+            String body = mvc.perform(get("/api/v1/tickets/" + ref))
+                    .andReturn().getResponse().getContentAsString();
+
+            assertThat(JSON.readTree(body).get("failure").isNull()).isTrue();
         }
 
         @Test

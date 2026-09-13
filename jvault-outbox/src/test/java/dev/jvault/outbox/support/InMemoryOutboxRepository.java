@@ -72,6 +72,15 @@ public final class InMemoryOutboxRepository implements OutboxRepository {
     }
 
     @Override
+    public synchronized List<OutboxEntry> findForTicket(String ticketRef) {
+        return entries.values().stream()
+                .filter(e -> e.ticketRef().equals(ticketRef))
+                .sorted(java.util.Comparator.comparing(OutboxEntry::createdAt)
+                        .thenComparing(OutboxEntry::effectKey))
+                .toList();
+    }
+
+    @Override
     public synchronized List<OutboxEntry> findInFlightOlderThan(Instant threshold) {
         return entries.values().stream()
                 .filter(e -> e.state() == OutboxState.IN_FLIGHT)

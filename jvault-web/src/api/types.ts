@@ -80,7 +80,17 @@ export interface TicketResponse {
   jiraFields: Record<string, string>;
   /** Readable values for stored identifiers, keyed by the identifier itself. */
   fieldDisplayNames: Record<string, string>;
+  /** Why the Jira write has not happened, or null while nothing has gone wrong. */
+  failure: TicketFailure | null;
   parts: TicketPart[];
+}
+
+export interface TicketFailure {
+  operation: string;
+  code: string;
+  attempts: number;
+  /** Whether anything is still going to try. False means this is where it stopped. */
+  retrying: boolean;
 }
 
 /** RFC 9457, which is what the API returns for every failure. */

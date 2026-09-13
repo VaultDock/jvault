@@ -666,6 +666,23 @@ button:focus-visible {
   margin-bottom: 1rem;
 }
 
+/* Still trying is not the same as having failed, and looking the same would say it was. */
+.notice--warn {
+  background: #fdf6e3;
+  color: #8a5a00;
+  border: 1px solid currentColor;
+  margin-bottom: 1rem;
+}
+
+/* Its own line, and never broken across one: a code split down the middle is unreadable and
+   unsearchable, which is the only two things it is for. */
+.notice__code {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
 /* --- rich text ----------------------------------------------------------- */
 
 .richtext {

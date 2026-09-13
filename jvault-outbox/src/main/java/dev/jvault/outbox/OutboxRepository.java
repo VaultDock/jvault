@@ -44,6 +44,14 @@ public interface OutboxRepository {
     Optional<OutboxEntry> findByEffect(String ticketRef, String effectKey);
 
     /** Entries stuck {@link OutboxState#IN_FLIGHT}, which the ambiguity resolver owns. */
+    /**
+     * Every effect queued for one ticket, whatever its state.
+     *
+     * <p>For answering "why is this ticket stuck", which a ticket record cannot answer on its
+     * own: it knows it failed, and the entry that failed knows what Jira said.
+     */
+    List<OutboxEntry> findForTicket(String ticketRef);
+
     List<OutboxEntry> findInFlightOlderThan(Instant threshold);
 
     /** Releases entries claimed by a dispatcher that died before sending them. */

@@ -82,6 +82,8 @@ export interface Strings {
   tooLargeToShow: string;
   cannotPreview: (mediaType: string) => string;
   download: string;
+  stillTrying: (attempts: number) => string;
+  gaveUp: string;
   downloading: string;
   downloadRefused: string;
   notInJira: string;
@@ -181,6 +183,8 @@ const en: Strings = {
   tooLargeToShow: 'This is too large to show here.',
   cannotPreview: (mediaType) => `jvault cannot show ${mediaType} on a page.`,
   download: 'Download a copy',
+  stillTrying: (attempts) => `Jira has not accepted this yet. ${attempts} attempts so far; Jira reported:`,
+  gaveUp: 'Jira will not accept this, and nothing further will be tried. Jira reported:',
   downloading: 'Preparing the copy…',
   downloadRefused: 'You may read this here, but not take a copy of it.',
   notInJira: 'Not in Jira',
@@ -280,6 +284,8 @@ const de: Strings = {
   tooLargeToShow: 'Das ist zu groß, um es hier anzuzeigen.',
   cannotPreview: (mediaType) => `jvault kann ${mediaType} nicht auf einer Seite anzeigen.`,
   download: 'Kopie herunterladen',
+  stillTrying: (attempts) => `Jira hat dies noch nicht angenommen. Bisher ${attempts} Versuche; Jira meldete:`,
+  gaveUp: 'Jira nimmt dies nicht an, und es wird nichts weiter versucht. Jira meldete:',
   downloading: 'Kopie wird vorbereitet…',
   downloadRefused: 'Sie dürfen dies hier lesen, aber keine Kopie mitnehmen.',
   notInJira: 'Nicht in Jira',
@@ -379,6 +385,8 @@ const fr: Strings = {
   tooLargeToShow: 'Trop volumineux pour être affiché ici.',
   cannotPreview: (mediaType) => `jvault ne peut pas afficher ${mediaType} sur une page.`,
   download: 'Télécharger une copie',
+  stillTrying: (attempts) => `Jira ne l’a pas encore accepté. ${attempts} tentatives à ce jour ; Jira a signalé :`,
+  gaveUp: 'Jira n’acceptera pas ceci et plus rien ne sera tenté. Jira a signalé :',
   downloading: 'Préparation de la copie…',
   downloadRefused: 'Vous pouvez lire ceci ici, mais pas en emporter une copie.',
   notInJira: 'Pas dans Jira',
@@ -478,6 +486,8 @@ const es: Strings = {
   tooLargeToShow: 'Es demasiado grande para mostrarlo aquí.',
   cannotPreview: (mediaType) => `jvault no puede mostrar ${mediaType} en una página.`,
   download: 'Descargar una copia',
+  stillTrying: (attempts) => `Jira aún no lo ha aceptado. ${attempts} intentos hasta ahora; Jira informó:`,
+  gaveUp: 'Jira no aceptará esto y no se intentará nada más. Jira informó:',
   downloading: 'Preparando la copia…',
   downloadRefused: 'Puede leerlo aquí, pero no llevarse una copia.',
   notInJira: 'No está en Jira',
@@ -577,6 +587,8 @@ const it: Strings = {
   tooLargeToShow: 'È troppo grande per essere mostrato qui.',
   cannotPreview: (mediaType) => `jvault non può mostrare ${mediaType} in una pagina.`,
   download: 'Scarica una copia',
+  stillTrying: (attempts) => `Jira non lo ha ancora accettato. ${attempts} tentativi finora; Jira ha segnalato:`,
+  gaveUp: 'Jira non accetterà questo e non verrà tentato altro. Jira ha segnalato:',
   downloading: 'Preparazione della copia…',
   downloadRefused: 'Puoi leggerlo qui, ma non portarne via una copia.',
   notInJira: 'Non in Jira',
@@ -676,6 +688,8 @@ const nl: Strings = {
   tooLargeToShow: 'Dit is te groot om hier te tonen.',
   cannotPreview: (mediaType) => `jvault kan ${mediaType} niet op een pagina tonen.`,
   download: 'Een kopie downloaden',
+  stillTrying: (attempts) => `Jira heeft dit nog niet geaccepteerd. ${attempts} pogingen tot nu toe; Jira meldde:`,
+  gaveUp: 'Jira accepteert dit niet en er wordt niets meer geprobeerd. Jira meldde:',
   downloading: 'De kopie wordt voorbereid…',
   downloadRefused: 'U mag dit hier lezen, maar er geen kopie van meenemen.',
   notInJira: 'Niet in Jira',
@@ -775,6 +789,8 @@ const pt: Strings = {
   tooLargeToShow: 'É demasiado grande para mostrar aqui.',
   cannotPreview: (mediaType) => `O jvault não consegue mostrar ${mediaType} numa página.`,
   download: 'Transferir uma cópia',
+  stillTrying: (attempts) => `O Jira ainda não aceitou isto. ${attempts} tentativas até agora; o Jira indicou:`,
+  gaveUp: 'O Jira não vai aceitar isto e nada mais será tentado. O Jira indicou:',
   downloading: 'A preparar a cópia…',
   downloadRefused: 'Pode ler isto aqui, mas não levar uma cópia.',
   notInJira: 'Não está no Jira',
@@ -874,6 +890,8 @@ const lb: Strings = {
   tooLargeToShow: 'Dat ass ze grouss fir hei ze weisen.',
   cannotPreview: (mediaType) => `De jvault kann ${mediaType} net op enger Säit weisen.`,
   download: 'Eng Kopie eroflueden',
+  stillTrying: (attempts) => `De Jira huet dat nach net ugeholl. Bis elo ${attempts} Versuch; de Jira huet gemellt:`,
+  gaveUp: 'De Jira hëlt dat net un, an et gëtt näischt méi probéiert. De Jira huet gemellt:',
   downloading: 'D\u2019Kopie gëtt virbereet…',
   downloadRefused: 'Dir dierft dat hei liesen, awer keng Kopie mathuelen.',
   notInJira: 'Net am Jira',

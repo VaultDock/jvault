@@ -63,6 +63,7 @@ public final class JdbcOutboxRepository implements OutboxRepository {
     private final String selectById;
     private final String selectByEffect;
     private final String selectInFlight;
+    private final String selectForTicket;
 
     public JdbcOutboxRepository(DataSource dataSource, SqlDialect dialect) {
         Objects.requireNonNull(dataSource, "dataSource");
@@ -76,6 +77,10 @@ public final class JdbcOutboxRepository implements OutboxRepository {
                 "SELECT " + columns + " FROM jira_outbox WHERE ticket_ref = ? AND effect_key = ?";
         this.selectInFlight = "SELECT " + columns + " FROM jira_outbox"
                 + " WHERE state = 'IN_FLIGHT' AND attempt_started_at < ?";
+        // Ordered, because the caller is explaining a ticket to somebody and the order the
+        // effects were queued in is the order they happened in.
+        this.selectForTicket = "SELECT " + columns + " FROM jira_outbox"
+                + " WHERE ticket_ref = ? ORDER BY created_at, effect_key";
     }
 
     @Override
@@ -158,6 +163,11 @@ public final class JdbcOutboxRepository implements OutboxRepository {
     public Optional<OutboxEntry> findByEffect(String ticketRef, String effectKey) {
         return jdbc.query(selectByEffect, OutboxRowMapper.rowMapper(), ticketRef, effectKey)
                 .stream().findFirst();
+    }
+
+    @Override
+    public List<OutboxEntry> findForTicket(String ticketRef) {
+        return jdbc.query(selectForTicket, OutboxRowMapper.rowMapper(), ticketRef);
     }
 
     @Override
