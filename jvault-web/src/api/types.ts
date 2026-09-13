@@ -87,3 +87,18 @@ export interface Problem {
   code?: string;
   errors?: { field: string; code: string; message?: string }[];
 }
+
+export interface UserRef {
+  accountId: string;
+  displayName: string;
+  email: string | null;
+  active: boolean;
+}
+
+/** Who jvault thinks you are, and which language Jira's own labels arrive in. */
+export interface Identity {
+  user: string;
+  jiraAccount: string | null;
+  jiraLocale: string | null;
+  deployment: string;
+}

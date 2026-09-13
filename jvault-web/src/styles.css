@@ -141,6 +141,123 @@ body {
   box-shadow: 0 0 0 3px var(--danger-soft);
 }
 
+.topbar__lang select {
+  width: auto;
+  padding: 0.2rem 1.7rem 0.2rem 0.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background-color: transparent;
+  border-color: transparent;
+  background-position: right 0.75rem center, right 0.45rem center;
+}
+
+.topbar__lang select:hover {
+  border-color: var(--border);
+  background-color: var(--surface-sunken);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- people picker ------------------------------------------------------- */
+
+.picker {
+  position: relative;
+}
+
+.picker__chosen {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.picker__list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 15rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lift);
+}
+
+.picker__list li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.picker__list li.is-highlighted {
+  background: var(--accent-soft);
+}
+
+.picker__empty {
+  color: var(--text-muted);
+  cursor: default;
+  font-size: 0.87rem;
+}
+
+.picker__name {
+  font-weight: 500;
+}
+
+.picker__meta {
+  color: var(--text-faint);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker__clear {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.picker__clear:hover {
+  color: var(--text);
+  background: var(--surface-sunken);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
 main {
   max-width: 46rem;
   margin: 0 auto;

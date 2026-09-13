@@ -1,10 +1,12 @@
 import type {
   CreateTicketRequest,
   FormDefinition,
+  Identity,
   IssueType,
   Problem,
   Project,
   TicketResponse,
+  UserRef,
 } from './types';
 
 /**
@@ -56,7 +58,15 @@ async function problemFrom(response: Response): Promise<Problem> {
 }
 
 export const api = {
+  me: () => request<Identity>('/api/v1/meta/me'),
+
   projects: () => request<Project[]>('/api/v1/meta/projects'),
+
+  searchUsers: (projectKey: string, query: string, assignable: boolean) =>
+    request<UserRef[]>(
+      `/api/v1/meta/projects/${encodeURIComponent(projectKey)}/users` +
+        `?query=${encodeURIComponent(query)}&assignable=${assignable}`,
+    ),
 
   issueTypes: (projectKey: string) =>
     request<IssueType[]>(`/api/v1/meta/projects/${encodeURIComponent(projectKey)}/issuetypes`),

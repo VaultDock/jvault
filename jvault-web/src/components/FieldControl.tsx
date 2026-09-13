@@ -1,6 +1,8 @@
 import type { FormField } from '../api/types';
+import { useT } from '../i18n';
 import { FieldHint, PlacementBadge, SupportBadge } from './PlacementBadge';
 import { RichTextField } from './RichTextField';
+import { UserPicker } from './UserPicker';
 
 /**
  * One field of the create form.
@@ -11,15 +13,18 @@ import { RichTextField } from './RichTextField';
  */
 export function FieldControl({
   field,
+  projectKey,
   value,
   error,
   onChange,
 }: {
   field: FormField;
+  projectKey: string;
   value: string;
   error?: string | undefined;
   onChange: (value: string) => void;
 }) {
+  const { t } = useT();
   const editable = field.supportLevel !== 'READ_ONLY';
   const id = `field-${field.key}`;
 
@@ -37,20 +42,16 @@ export function FieldControl({
         <label className="field__label" htmlFor={id}>
           {field.name}
           {field.required ? (
-            <span className="field__required" aria-label="required">
+            <span className="field__required" aria-label={t.required}>
               *
             </span>
           ) : null}
         </label>
         <PlacementBadge field={field} />
         <SupportBadge field={field} />
-        {field.key.startsWith('customfield_') ? (
-          // The label of a custom field is whoever named it; the key is what the API call uses.
-          <span className="field__key">{field.key}</span>
-        ) : null}
       </div>
 
-      {renderControl(field, id, value, editable, onChange)}
+      {renderControl(field, projectKey, id, value, editable, onChange, t)}
 
       <FieldHint field={field} />
 
@@ -70,10 +71,12 @@ function splitValues(value: string): string[] {
 
 function renderControl(
   field: FormField,
+  projectKey: string,
   id: string,
   value: string,
   editable: boolean,
   onChange: (value: string) => void,
+  t: ReturnType<typeof useT>['t'],
 ) {
   const common = {
     id,
@@ -105,7 +108,7 @@ function renderControl(
             )
           }
         >
-          {field.control === 'MULTI_SELECT' ? null : <option value="">Choose…</option>}
+          {field.control === 'MULTI_SELECT' ? null : <option value="">{t.choose}</option>}
           {field.allowedValues.map((option) => (
             <option key={option.id} value={option.id}>
               {option.value}
@@ -140,21 +143,23 @@ function renderControl(
           {...common}
           type="text"
           value={value}
-          placeholder="Comma separated"
+          placeholder={t.commaSeparated}
           onChange={(event) => onChange(event.target.value)}
         />
       );
 
     case 'USER':
       return (
-        <input
-          {...common}
-          type="text"
+        <UserPicker
+          id={id}
+          projectKey={projectKey}
+          // Only an assignee has to be assignable. A reporter can be anyone with an account, and
+          // narrowing that list would hide the person who actually reported it.
+          assignable={field.key === 'assignee'}
           value={value}
-          // A picker needs a user search endpoint, which jvault does not proxy yet. An account id
-          // that works is better than a name picker that does not.
-          placeholder="Account id"
-          onChange={(event) => onChange(event.target.value)}
+          disabled={!editable}
+          required={field.required}
+          onChange={onChange}
         />
       );
 

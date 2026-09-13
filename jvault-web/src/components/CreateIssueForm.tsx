@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ApiError, api } from '../api/client';
 import type { FormDefinition, FormField, TicketResponse } from '../api/types';
+import { useT } from '../i18n';
 import { FieldControl } from './FieldControl';
 import { AlertIcon, CheckIcon, VaultIcon } from './icons';
 
@@ -20,6 +21,7 @@ export function CreateIssueForm({
   definition: FormDefinition;
   deploymentId: string;
 }) {
+  const { t } = useT();
   const [values, setValues] = useState<Record<string, string>>({});
   const [fieldErrors, setFieldErrors] = useState<Map<string, string>>(new Map());
   const [status, setStatus] = useState<Status>({ kind: 'editing' });
@@ -68,7 +70,7 @@ export function CreateIssueForm({
         setAttempt(crypto.randomUUID());
         setStatus({
           kind: 'failed',
-          message: byField.size > 0 ? 'Some fields need attention.' : error.message,
+          message: byField.size > 0 ? t.errorFields : error.message,
         });
         return;
       }
@@ -76,7 +78,7 @@ export function CreateIssueForm({
       // was, retrying returns that ticket rather than making a second one.
       setStatus({
         kind: 'failed',
-        message: 'Could not reach jvault. Retrying will not create a duplicate.',
+        message: t.errorRetrySafe,
       });
     }
   }
@@ -102,12 +104,9 @@ export function CreateIssueForm({
             <VaultIcon />
             <span>
               <strong>
-                {external.length === 1
-                  ? 'One field on this form is'
-                  : `${external.length} fields on this form are`}{' '}
-                stored in jvault rather than in Jira.
+                {external.length === 1 ? t.vaultNoticeOne : t.vaultNoticeMany(external.length)}
               </strong>{' '}
-              Each is marked below. Jira sees a link; the text itself never leaves this system.
+              {t.vaultNoticeTail}
             </span>
           </p>
         ) : null}
@@ -123,6 +122,7 @@ export function CreateIssueForm({
           <FieldControl
             key={field.key}
             field={field}
+            projectKey={definition.projectKey}
             value={values[field.key] ?? ''}
             error={fieldErrors.get(field.key)}
             onChange={(value) => setValues((current) => ({ ...current, [field.key]: value }))}
@@ -132,10 +132,10 @@ export function CreateIssueForm({
 
       <div className="actions">
         <button type="submit" className="btn-primary" disabled={status.kind === 'submitting'}>
-          {status.kind === 'submitting' ? 'Creating…' : 'Create'}
+          {status.kind === 'submitting' ? t.creating : t.create}
         </button>
         <span className="actions__note">
-          {shown.length} fields · {external.length} held in jvault
+          {t.fieldCount(shown.length, external.length)}
         </span>
       </div>
     </form>
@@ -155,31 +155,32 @@ function filled(fields: FormField[], values: Record<string, string>): Record<str
 }
 
 function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: () => void }) {
+  const { t } = useT();
   return (
     <div className="result">
       <div className="result__head">
         <span className="result__tick">
           <CheckIcon />
         </span>
-        <h2>Created</h2>
+        <h2>{t.created}</h2>
       </div>
 
       <dl>
-        <dt>Ticket</dt>
+        <dt>{t.ticket}</dt>
         <dd>{ticket.ticketRef}</dd>
-        <dt>State</dt>
+        <dt>{t.state}</dt>
         {/* A ticket can exist before its Jira issue does: the write is dispatched from the
             outbox, so "accepted, not yet in Jira" is a real and ordinary state to be in. */}
         <dd>
           <span className="pill">{ticket.state}</span>
         </dd>
-        <dt>Jira issue</dt>
-        <dd>{ticket.issueKey ?? 'being created'}</dd>
+        <dt>{t.jiraIssue}</dt>
+        <dd>{ticket.issueKey ?? t.beingCreated}</dd>
       </dl>
 
       {ticket.parts.length > 0 ? (
         <>
-          <h3>Held in jvault</h3>
+          <h3>{t.heldInVault}</h3>
           <ul className="parts">
             {ticket.parts.map((part) => (
               <li key={part.contentRef}>
@@ -188,7 +189,7 @@ function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: (
                 <span className="chip chip--class">{part.classification.toLowerCase()}</span>
                 {/* Not a capability. Following it is authorized afresh, so a link that reaches
                     the wrong person still shows them nothing. */}
-                <a href={part.link}>open</a>
+                <a href={part.link}>{t.open}</a>
               </li>
             ))}
           </ul>
@@ -196,7 +197,7 @@ function CreatedTicket({ ticket, onReset }: { ticket: TicketResponse; onReset: (
       ) : null}
 
       <button type="button" className="btn-secondary" onClick={onReset}>
-        Create another
+        {t.createAnother}
       </button>
     </div>
   );

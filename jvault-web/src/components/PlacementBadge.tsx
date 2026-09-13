@@ -1,4 +1,5 @@
 import type { FormField } from '../api/types';
+import { useT } from '../i18n';
 import { LockIcon, SplitIcon, VaultIcon } from './icons';
 
 /**
@@ -9,6 +10,7 @@ import { LockIcon, SplitIcon, VaultIcon } from './icons';
  * Jira has already decided how much to type into it.
  */
 export function PlacementBadge({ field }: { field: FormField }) {
+  const { t } = useT();
   if (field.placement === 'JIRA') {
     return null;
   }
@@ -19,7 +21,7 @@ export function PlacementBadge({ field }: { field: FormField }) {
     <>
       <span className={external ? 'chip chip--vault' : 'chip chip--both'}>
         {external ? <VaultIcon /> : <SplitIcon />}
-        {external ? 'Stored in jvault' : 'Jira and jvault'}
+        {external ? t.storedInVault : t.bothPlaces}
       </span>
       {field.classification ? (
         <span className="chip chip--class">{field.classification.toLowerCase()}</span>
@@ -30,37 +32,39 @@ export function PlacementBadge({ field }: { field: FormField }) {
 
 /** The chip for a field jvault will not let anyone edit here. */
 export function SupportBadge({ field }: { field: FormField }) {
+  const { t } = useT();
   if (field.supportLevel !== 'READ_ONLY') {
     return null;
   }
   return (
     <span className="chip chip--muted">
       <LockIcon />
-      Read-only
+      {t.readOnly}
     </span>
   );
 }
 
 /** The sentence under a control, when there is something true worth saying. */
 export function FieldHint({ field }: { field: FormField }) {
+  const { t } = useT();
   const lines: string[] = [];
 
   if (field.placement === 'EXTERNAL') {
-    lines.push('Jira will show a link here, not this text.');
+    lines.push(t.hintExternal);
   } else if (field.placement === 'BOTH') {
-    lines.push('This text goes to Jira as well as jvault.');
+    lines.push(t.hintBoth);
   }
 
   if (field.supportLevel === 'READ_ONLY') {
-    lines.push('Not editable here — open the issue in Jira to change it.');
+    lines.push(t.hintReadOnly);
   } else if (field.supportLevel === 'DELEGATED_VALIDATION') {
-    lines.push('Jira validates this field when the ticket is submitted.');
+    lines.push(t.hintDelegated);
   }
 
   if (field.hasMoreOptions) {
     // Truncated rather than complete, and saying so beats a list that quietly omits the value
     // someone is looking for.
-    lines.push('Showing the first options only. Type the exact value if it is not listed.');
+    lines.push(t.hintTruncated);
   }
 
   if (lines.length === 0) {

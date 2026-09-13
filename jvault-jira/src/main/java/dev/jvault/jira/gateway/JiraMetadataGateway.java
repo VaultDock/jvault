@@ -25,6 +25,41 @@ public interface JiraMetadataGateway {
      */
     List<FieldMeta> fields(String projectKey, String issueTypeId);
 
+    /** Who jvault is to Jira. */
+    CurrentUser currentUser();
+
+    /**
+     * People matching a query.
+     *
+     * @param assignable when true, only those who can be assigned work in this project. The
+     *                   narrower list is the right default for an assignee and the wrong one for
+     *                   a reporter, so the caller chooses rather than this guessing
+     */
+    List<UserRef> searchUsers(String projectKey, String query, boolean assignable);
+
+    /**
+     * The account jvault is acting as.
+     *
+     * <p>Its locale matters beyond politeness: Jira returns field names in the language of the
+     * <em>authenticated</em> account and ignores Accept-Language on the createmeta endpoints, so
+     * this is the language the field labels arrive in. With a service account (decision D4) that
+     * is one language for everybody, which is a thing the interface has to be honest about
+     * rather than quietly pretend otherwise.
+     *
+     * @param locale a Java-style locale such as {@code en_GB}, or {@code null} if Jira omits it
+     */
+    record CurrentUser(String accountId, String displayName, String locale) {
+    }
+
+    /**
+     * Someone a user field can be set to.
+     *
+     * <p>An account id is the only thing Jira accepts and the last thing a person knows, which is
+     * why a text box asking for one is not a control so much as an obstacle.
+     */
+    record UserRef(String accountId, String displayName, String email, boolean active) {
+    }
+
     record Project(String id, String key, String name, String style) {
     }
 

@@ -156,6 +156,39 @@ class MetadataControllerTest {
     }
 
     @Test
+    @DisplayName("the identity endpoint reports the language Jira's own labels arrive in")
+    void identityCarriesTheJiraLocale() throws Exception {
+        String body = mvc.perform(get("/api/v1/meta/me"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // Jira returns field names in the authenticated account's language and ignores
+        // Accept-Language, so with a service account this is everyone's label language whether
+        // they chose it or not. The client cannot be honest about that without being told.
+        var identity = JSON.readTree(body);
+        assertThat(identity.get("jiraLocale").asText()).isEqualTo("en_GB");
+        assertThat(identity.get("user").asText()).isEqualTo("alice");
+        assertThat(identity.get("jiraAccount").asText()).isEqualTo("Service Account");
+    }
+
+    @Test
+    @DisplayName("a user search narrows to the assignable list when asked")
+    void userSearchRespectsAssignable() throws Exception {
+        String assignable = mvc.perform(get("/api/v1/meta/projects/KAN/users?query=a"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        String everyone = mvc.perform(
+                        get("/api/v1/meta/projects/KAN/users?query=a&assignable=false"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // An assignee must be assignable; a reporter can be anyone, and narrowing that list
+        // would hide the person who actually reported it.
+        assertThat(JSON.readTree(assignable)).hasSize(1);
+        assertThat(JSON.readTree(everyone)).hasSize(2);
+    }
+
+    @Test
     @DisplayName("an anonymous caller gets 401")
     void anonymousIsRefused() throws Exception {
         caller.set(null);
@@ -201,6 +234,20 @@ class MetadataControllerTest {
             @Override
             public List<Project> projects() {
                 return List.of(new Project("10000", "KAN", "My first Jira", "next-gen"));
+            }
+
+            @Override
+            public CurrentUser currentUser() {
+                return new CurrentUser("712020:abc", "Service Account", "en_GB");
+            }
+
+            @Override
+            public List<UserRef> searchUsers(String projectKey, String query, boolean assignable) {
+                var everyone = List.of(
+                        new UserRef("5b10a2", "Ada Lovelace", "ada@example.com", true),
+                        new UserRef("5b10a3", "Grace Hopper", null, true));
+                // The assignable list is narrower, which is the distinction under test.
+                return assignable ? List.of(everyone.get(0)) : everyone;
             }
 
             @Override

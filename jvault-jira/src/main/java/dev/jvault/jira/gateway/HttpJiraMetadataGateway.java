@@ -27,6 +27,9 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
     /** Beyond this an option list needs a search endpoint, not a longer response. */
     private static final int MAX_OPTIONS = 100;
 
+    /** A picker shows a page, not a directory. Anything longer means typing more, not scrolling. */
+    private static final int MAX_USERS = 20;
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JiraDeployment deployment;
@@ -80,6 +83,42 @@ public final class HttpJiraMetadataGateway implements JiraMetadataGateway {
             fields.add(toFieldMeta(field));
         }
         return List.copyOf(fields);
+    }
+
+    @Override
+    public CurrentUser currentUser() {
+        JsonNode body = get("/rest/api/" + deployment.apiVersion() + "/myself");
+        return new CurrentUser(
+                body.path("accountId").asText(null),
+                body.path("displayName").asText(null),
+                body.path("locale").asText(null));
+    }
+
+    @Override
+    public List<UserRef> searchUsers(String projectKey, String query, boolean assignable) {
+        String path = assignable
+                ? "/rest/api/" + deployment.apiVersion() + "/user/assignable/search?project="
+                        + encode(projectKey)
+                : "/rest/api/" + deployment.apiVersion() + "/user/search?";
+
+        JsonNode body = get(path + "&query=" + encode(query == null ? "" : query)
+                + "&maxResults=" + MAX_USERS);
+
+        var users = new ArrayList<UserRef>();
+        for (JsonNode user : body) {
+            // App and customer accounts show up in these results and mean nothing on a create
+            // screen; offering them is how someone assigns an issue to a bot.
+            if (!"atlassian".equals(user.path("accountType").asText("atlassian"))) {
+                continue;
+            }
+            users.add(new UserRef(
+                    user.path("accountId").asText(null),
+                    user.path("displayName").asText(null),
+                    // Absent unless the account shares it, which most do not.
+                    user.path("emailAddress").asText(null),
+                    user.path("active").asBoolean(true)));
+        }
+        return List.copyOf(users);
     }
 
     private static FieldMeta toFieldMeta(JsonNode field) {

@@ -61,6 +61,41 @@ public class MetadataController {
         return authenticated(request, caller -> ResponseEntity.ok(metadata.projects()));
     }
 
+    /**
+     * The account jvault acts as, and the language its Jira answers arrive in.
+     *
+     * <p>The locale is not decoration. Jira returns field names in the authenticated account's
+     * language and ignores Accept-Language on createmeta, so with a service account every user
+     * sees the same field labels regardless of their own Jira setting. The client needs to know
+     * which language that is, and needs to be able to say so.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<?> me(HttpServletRequest request) {
+        return authenticated(request, caller -> {
+            JiraMetadataGateway.CurrentUser jiraAccount = metadata.currentUser();
+            return ResponseEntity.ok(new Identity(
+                    caller.principal().externalId(),
+                    jiraAccount.displayName(),
+                    jiraAccount.locale(),
+                    deploymentId));
+        });
+    }
+
+    /**
+     * People a user field can be set to.
+     *
+     * <p>Jira accepts an account id and nothing else, and an account id is the last thing a
+     * person knows about a colleague. Without this the control is a text box asking for a UUID.
+     */
+    @GetMapping("/projects/{projectKey}/users")
+    public ResponseEntity<?> users(@PathVariable String projectKey,
+                                   @RequestParam(defaultValue = "") String query,
+                                   @RequestParam(defaultValue = "true") boolean assignable,
+                                   HttpServletRequest request) {
+        return authenticated(request, caller ->
+                ResponseEntity.ok(metadata.searchUsers(projectKey, query, assignable)));
+    }
+
     @GetMapping("/projects/{projectKey}/issuetypes")
     public ResponseEntity<?> issueTypes(@PathVariable String projectKey,
                                         HttpServletRequest request) {
@@ -193,6 +228,13 @@ public class MetadataController {
     }
 
     public record FormDefinition(String projectKey, String issueTypeId, List<FormField> fields) {
+    }
+
+    /**
+     * @param jiraLocale the language Jira's own labels come back in, which is the service
+     *                   account's rather than this caller's
+     */
+    public record Identity(String user, String jiraAccount, String jiraLocale, String deployment) {
     }
 
     /**

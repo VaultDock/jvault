@@ -1,14 +1,50 @@
 import { useEffect, useState } from 'react';
 import { ApiError, api } from './api/client';
-import type { FormDefinition, IssueType, Project } from './api/types';
+import type { FormDefinition, Identity, IssueType, Project } from './api/types';
 import { CreateIssueForm } from './components/CreateIssueForm';
 import { AlertIcon, EmptyIcon } from './components/icons';
+import { LANGUAGES, TranslationProvider, pickLanguage, useT, type Language } from './i18n';
 
 const DEPLOYMENT_ID = import.meta.env['VITE_DEPLOYMENT_ID'] ?? 'jira-cloud-dev';
 
 type Connection = 'connecting' | 'live' | 'down';
 
+/**
+ * The language is decided before anything is rendered, because Jira's own account locale is one
+ * of the inputs to it and that takes a round trip.
+ */
 export function App() {
+  const [identity, setIdentity] = useState<Identity | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    api
+      .me()
+      .then(setIdentity)
+      // Not fatal. An unreachable API is reported by the page itself; falling back to the
+      // browser's language is better than showing nothing while deciding what to call it.
+      .catch(() => setIdentity(null))
+      .finally(() => setReady(true));
+  }, []);
+
+  if (!ready) {
+    return null;
+  }
+  return (
+    <TranslationProvider jiraLocale={identity?.jiraLocale ?? null}>
+      <CreateIssuePage jiraLocale={identity?.jiraLocale ?? null} />
+    </TranslationProvider>
+  );
+}
+
+function CreateIssuePage({ jiraLocale }: { jiraLocale: string | null }) {
+  const { t, language, setLanguage } = useT();
+
+  // Jira returns field names in the language of the account jvault authenticates as, and ignores
+  // Accept-Language on the createmeta endpoints. Reading German chrome around English field
+  // labels looks like a half-finished translation unless somebody says why.
+  const labelLanguage = pickLanguage(null, jiraLocale, []);
+  const labelsDiffer = labelLanguage !== language;
   const [projects, setProjects] = useState<Project[]>([]);
   const [connection, setConnection] = useState<Connection>('connecting');
   const [projectKey, setProjectKey] = useState('');
@@ -32,8 +68,11 @@ export function App() {
       })
       .catch((cause) => {
         setConnection('down');
-        report(cause, setError);
+        report(cause, setError, t.errorUnreachable);
       });
+    // The strings are read at the moment of failure; re-running this on a language change would
+    // mean re-querying Jira to re-word an error.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -41,7 +80,7 @@ export function App() {
     setIssueTypeId('');
     setDefinition(null);
     if (projectKey !== '') {
-      api.issueTypes(projectKey).then(setIssueTypes).catch((c) => report(c, setError));
+      api.issueTypes(projectKey).then(setIssueTypes).catch((c) => report(c, setError, t.errorUnreachable));
     }
   }, [projectKey]);
 
@@ -54,7 +93,7 @@ export function App() {
     api
       .form(projectKey, issueTypeId)
       .then(setDefinition)
-      .catch((c) => report(c, setError))
+      .catch((c) => report(c, setError, t.errorUnreachable))
       .finally(() => setLoadingForm(false));
   }, [projectKey, issueTypeId]);
 
@@ -66,15 +105,31 @@ export function App() {
         </span>
         <span className="topbar__name">jvault</span>
         <span className="topbar__status">
-          <span className={`dot dot--${connection === 'live' ? 'live' : connection === 'down' ? 'down' : ''}`} />
-          {connection === 'live' ? 'Jira connected' : connection === 'down' ? 'Jira unreachable' : 'Connecting…'}
+          <span
+            className={`dot dot--${
+              connection === 'live' ? 'live' : connection === 'down' ? 'down' : ''
+            }`}
+          />
+          {connection === 'live' ? t.connected : connection === 'down' ? t.unreachable : t.connecting}
         </span>
+
+        <label className="topbar__lang" title={t.languageNote}>
+          <span className="visually-hidden">{t.language}</span>
+          <select value={language} onChange={(event) => setLanguage(event.target.value as Language)}>
+            {Object.entries(LANGUAGES).map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
       </header>
 
       <main>
-        <h1 className="page-title">Create issue</h1>
+        <h1 className="page-title">{t.createIssue}</h1>
         <p className="page-sub">
-          The same fields Jira would ask for, plus where each answer is going to be kept.
+          {t.tagline}
+          {labelsDiffer ? <> {t.labelsFrom(LANGUAGES[labelLanguage])}</> : null}
         </p>
 
         {error ? (
@@ -88,7 +143,7 @@ export function App() {
           <div className="context">
             <div className="context__item">
               <label className="context__label" htmlFor="project">
-                Project
+                {t.project}
               </label>
               <select
                 id="project"
@@ -96,7 +151,7 @@ export function App() {
                 disabled={projects.length === 0}
                 onChange={(event) => setProjectKey(event.target.value)}
               >
-                <option value="">Choose…</option>
+                <option value="">{t.choose}</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.key}>
                     {project.name} ({project.key})
@@ -107,7 +162,7 @@ export function App() {
 
             <div className="context__item">
               <label className="context__label" htmlFor="issuetype">
-                Issue type
+                {t.issueType}
               </label>
               <select
                 id="issuetype"
@@ -115,7 +170,7 @@ export function App() {
                 disabled={issueTypes.length === 0}
                 onChange={(event) => setIssueTypeId(event.target.value)}
               >
-                <option value="">Choose…</option>
+                <option value="">{t.choose}</option>
                 {issueTypes.map((type) => (
                   <option key={type.id} value={type.id}>
                     {type.name}
@@ -132,14 +187,12 @@ export function App() {
               deploymentId={DEPLOYMENT_ID}
             />
           ) : loadingForm ? (
-            <FormSkeleton />
+            <FormSkeleton label={t.loadingForm} />
           ) : (
             <div className="empty">
               <EmptyIcon />
               <p>
-                {projectKey === ''
-                  ? 'Choose a project to begin.'
-                  : 'Choose an issue type — the form is built from what Jira says it has.'}
+                {projectKey === '' ? t.chooseProject : t.chooseIssueType}
               </p>
             </div>
           )}
@@ -149,9 +202,9 @@ export function App() {
   );
 }
 
-function FormSkeleton() {
+function FormSkeleton({ label }: { label: string }) {
   return (
-    <div className="form-body" aria-busy="true" aria-label="Loading the form">
+    <div className="form-body" aria-busy="true" aria-label={label}>
       {[68, 40, 55, 40, 48].map((width, index) => (
         <div className="field" key={index}>
           <div className="skeleton" style={{ width: `${width}%`, marginBottom: '0.5rem' }} />
@@ -162,12 +215,8 @@ function FormSkeleton() {
   );
 }
 
-function report(cause: unknown, setError: (message: string) => void) {
+function report(cause: unknown, setError: (message: string) => void, unreachable: string) {
   // Jira's own error bodies are not forwarded by the API, so there is nothing here that could
   // quote the request back at the user.
-  setError(
-    cause instanceof ApiError
-      ? `${cause.message} (${cause.status})`
-      : 'Could not reach jvault. Is the API running on port 8080?',
-  );
+  setError(cause instanceof ApiError ? `${cause.message} (${cause.status})` : unreachable);
 }

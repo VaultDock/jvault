@@ -4,6 +4,8 @@ import dev.jvault.authz.GrantService;
 import dev.jvault.content.ContentService;
 import dev.jvault.domain.placement.PolicyValidationException;
 import dev.jvault.jira.egress.EgressViolationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -24,6 +26,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     /**
      * The guard refused a Jira write.
@@ -83,8 +87,12 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail onAnythingElse(Exception e) {
-        // Nothing from the exception travels. An unhandled exception is by definition one whose
-        // message nobody has vetted for content, and the trace id is how it gets correlated.
+        // Logged here and nowhere else. Saying nothing to the client is right — an unhandled
+        // exception is by definition one whose message nobody has vetted for content — but
+        // saying nothing to anyone leaves a 500 with no cause, which is how an afternoon gets
+        // spent guessing at a URL.
+        log.error("Unhandled exception serving a request", e);
+
         return ApiProblem.of(HttpStatus.INTERNAL_SERVER_ERROR,
                 "internal-error", "The request could not be completed");
     }
