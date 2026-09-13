@@ -31,7 +31,7 @@ public record JvaultProperties(String tenant,
         crypto = crypto == null ? new Crypto(null) : crypto;
         policies = policies == null ? List.of() : List.copyOf(policies);
         kafka = kafka == null ? new Kafka(false, null, null, null, null) : kafka;
-        oauth = oauth == null ? new Oauth(false, null, null, null, null, false) : oauth;
+        oauth = oauth == null ? new Oauth(false, null, null, null, null, false, false, false) : oauth;
         dev = dev == null ? new Dev(false, null, null) : dev;
     }
 
@@ -144,13 +144,22 @@ public record JvaultProperties(String tenant,
      *                      exactly, including the scheme and any trailing path
      * @param secureCookies whether the session cookie is marked Secure. False only for plain
      *                      http on localhost; true everywhere a browser talks to this over TLS
+     * @param allowManualToken whether somebody may sign in by pasting a Jira API token. Off by
+     *                      default: it gives up per-scope limitation, revocation by the user and
+     *                      clean attribution, and the person typing the token is rarely the
+     *                      person who decided that was acceptable (docs/10 §10.6)
+     * @param allowAdministratorTokens whether a credential with Jira administrator rights may be
+     *                      imported. Off, because such a credential can read every project and
+     *                      makes the intersection with jvault's grants meaningless
      */
     public record Oauth(boolean enabled,
                         String clientId,
                         String clientSecret,
                         String redirectUri,
                         String appBaseUrl,
-                        boolean secureCookies) {
+                        boolean secureCookies,
+                        boolean allowManualToken,
+                        boolean allowAdministratorTokens) {
 
         public Oauth {
             appBaseUrl = appBaseUrl == null ? "http://localhost:5173" : appBaseUrl;

@@ -41,14 +41,18 @@ public final class JiraOAuthClient {
     /**
      * Least privilege, and granular where Atlassian offers it.
      *
-     * <p>Read-only on purpose. jvault writes to Jira as the service account (decision D4), so a
-     * user's token is only ever used to answer permission questions and to read metadata in
-     * their own language. Asking for write here would request a capability nothing uses, which
-     * is the kind of thing that fails a review for good reason.
+     * <p>Read-only, and narrower than that. jvault writes to Jira as the service account
+     * (decision D4), so a user's token is only ever used to answer "may this person see this
+     * project". Requesting write — or even user search — would ask for a capability nothing
+     * exercises, which is the kind of thing that fails a review for good reason.
      */
     private static final List<String> SCOPES = List.of(
+            // The only thing this token is ever used for: asking Jira whether this person may
+            // browse a project. User search and metadata go through the service account, so
+            // read:jira-user would be a scope nothing reads.
             "read:jira-work",
-            "read:jira-user",
+            // Without it Atlassian issues no refresh token and the connection dies at the first
+            // access-token expiry, roughly an hour later, with a re-consent to fix it.
             "offline_access");
 
     private final String clientId;

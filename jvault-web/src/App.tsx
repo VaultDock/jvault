@@ -39,10 +39,10 @@ export function App() {
     return null;
   }
 
-  if (auth && !auth.authenticated && auth.loginUrl) {
+  if (auth && !auth.authenticated) {
     return (
       <TranslationProvider jiraLocale={null}>
-        <SignIn loginUrl={auth.loginUrl} reason={signInReason()} />
+        <SignIn auth={auth} reason={signInReason()} />
       </TranslationProvider>
     );
   }
@@ -246,7 +246,7 @@ function Chrome({
           </span>
         ) : null}
 
-        {auth?.method === 'ATLASSIAN' ? (
+        {auth?.methods.includes('DEV') === false ? (
           <button
             type="button"
             className="topbar__signout"

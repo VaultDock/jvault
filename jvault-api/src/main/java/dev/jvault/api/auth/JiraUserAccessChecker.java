@@ -107,14 +107,13 @@ public final class JiraUserAccessChecker implements ContentAuthorizationService.
         }
 
         try {
-            String url = "https://api.atlassian.com/ex/jira/" + maybe.get().cloudId()
-                    + "/rest/api/3/mypermissions?permissions=BROWSE_PROJECTS&projectKey="
-                    + URLEncoder.encode(projectKey, StandardCharsets.UTF_8);
+            SessionStore.Connection connection = maybe.get();
+            String url = permissionsUrl(connection, projectKey);
 
             HttpResponse<String> response = http.send(
                     HttpRequest.newBuilder(URI.create(url))
                             .timeout(Duration.ofSeconds(8))
-                            .header("Authorization", "Bearer " + token.reveal())
+                            .header("Authorization", authorizationFor(connection, token))
                             .header("Accept", "application/json")
                             .GET().build(),
                     HttpResponse.BodyHandlers.ofString());
@@ -144,6 +143,37 @@ public final class JiraUserAccessChecker implements ContentAuthorizationService.
     }
 
     /**
+     * Where to ask.
+     *
+     * <p>An OAuth token is presented to Atlassian's gateway against a cloud id; a manually
+     * imported credential belongs to the site itself and is presented there. Sending either to
+     * the other's host produces a 401 that looks exactly like a revoked permission.
+     */
+    private static String permissionsUrl(SessionStore.Connection connection, String projectKey) {
+        String query = "/rest/api/3/mypermissions?permissions=BROWSE_PROJECTS&projectKey="
+                + URLEncoder.encode(projectKey, StandardCharsets.UTF_8);
+
+        return connection.kind() == SessionStore.Connection.Kind.MANUAL_TOKEN
+                ? trimTrailingSlash(connection.siteUrl()) + query
+                : "https://api.atlassian.com/ex/jira/" + connection.cloudId() + query;
+    }
+
+    private static String authorizationFor(SessionStore.Connection connection,
+                                           SensitiveValue token) {
+        if (connection.kind() == SessionStore.Connection.Kind.MANUAL_TOKEN) {
+            // Basic, with the email: an Atlassian API token is half a credential on its own.
+            return "Basic " + java.util.Base64.getEncoder().encodeToString(
+                    (connection.authEmail() + ":" + token.reveal())
+                            .getBytes(StandardCharsets.UTF_8));
+        }
+        return "Bearer " + token.reveal();
+    }
+
+    private static String trimTrailingSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
+
+    /**
      * A usable access token, refreshing if it has expired.
      *
      * <p>Serialised per connection. Cloud refresh tokens rotate — each use invalidates the
@@ -156,8 +186,10 @@ public final class JiraUserAccessChecker implements ContentAuthorizationService.
         if (connection.isFresh(now)) {
             return connection.accessToken();
         }
-        if (connection.refreshToken() == null) {
-            throw new IllegalStateException("the connection has expired and cannot be refreshed");
+        if (!connection.isRenewable()) {
+            // A manually imported token cannot be renewed on the user's behalf; somebody has to
+            // import a new one. Saying so beats a refresh call that was never going to work.
+            throw new IllegalStateException("the connection has expired and cannot be renewed");
         }
 
         synchronized (this) {
@@ -173,6 +205,7 @@ public final class JiraUserAccessChecker implements ContentAuthorizationService.
             JiraOAuthClient.Tokens refreshed = oauth.refresh(current.refreshToken());
             var updated = new SessionStore.Connection(current.accountId(),
                     current.deploymentId(), current.cloudId(), current.siteUrl(),
+                    current.authEmail(), current.kind(),
                     refreshed.accessToken(),
                     refreshed.refreshToken() == null ? current.refreshToken()
                             : refreshed.refreshToken(),

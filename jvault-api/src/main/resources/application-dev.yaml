@@ -65,6 +65,10 @@ jvault:
     app-base-url: http://localhost:5173
     # Plain http on localhost only. Anywhere a browser reaches this over TLS, this is true.
     secure-cookies: false
+    # The fallback for a deployment that cannot reach auth.atlassian.com. An explicit admin
+    # decision, because it gives up per-scope limitation, revocation by the user, and clean
+    # attribution (docs/10-authentication.md 10.6).
+    allow-manual-token: ${JVAULT_ALLOW_MANUAL_TOKEN:false}
 
   dev:
     # Identity from a request header. Named so that nobody enables it by accident, and the

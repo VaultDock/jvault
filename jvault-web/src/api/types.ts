@@ -110,8 +110,8 @@ export interface AuthStatus {
   authenticated: boolean;
   displayName: string | null;
   email: string | null;
-  /** ATLASSIAN when sign-in goes through Atlassian; DEV when a header is trusted instead. */
-  method: 'ATLASSIAN' | 'DEV';
+  /** The ways in this deployment offers, in the order to show them. */
+  methods: ('ATLASSIAN' | 'MANUAL_TOKEN' | 'DEV')[];
   loginUrl: string | null;
 }
 

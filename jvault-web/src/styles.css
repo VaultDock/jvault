@@ -223,6 +223,73 @@ body {
   text-decoration: none;
 }
 
+.signin__alt {
+  display: block;
+  margin: 1rem auto 0;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.87rem;
+}
+
+.signin__alt:hover {
+  color: var(--text);
+}
+
+.signin__rule {
+  margin: 1.5rem 0 1.25rem;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.signin__token {
+  text-align: left;
+}
+
+.signin__token label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.signin__token input {
+  margin-bottom: 0.9rem;
+}
+
+.signin__token button {
+  width: 100%;
+}
+
+/* Quieter than the Atlassian button on purpose: it is the fallback, not the recommendation. */
+.signin__token--secondary button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+}
+
+.signin__token--secondary button:hover:not(:disabled) {
+  background: var(--surface-sunken);
+}
+
+.signin__tradeoff {
+  display: flex;
+  gap: 0.55rem;
+  margin: 0 0 1.1rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.signin__tradeoff svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 0.12rem;
+}
+
 .signin__note {
   margin: 1.2rem 0 0;
   font-size: 0.82rem;

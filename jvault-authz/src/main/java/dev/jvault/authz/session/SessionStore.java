@@ -62,16 +62,36 @@ public interface SessionStore {
                       String deploymentId,
                       String cloudId,
                       String siteUrl,
+                      String authEmail,
+                      Kind kind,
                       SensitiveValue accessToken,
                       SensitiveValue refreshToken,
                       Instant accessExpiresAt,
                       String grantedScopes,
                       String flowUsed) {
 
+        /**
+         * How the credential is presented, and whether it can be renewed.
+         *
+         * <p>Derived from the flow today and stored anyway: the two answers differ in what they
+         * cost to get wrong. Sending a basic credential as a bearer token fails closed; deciding
+         * a manual token can be refreshed does not.
+         */
+        public enum Kind {
+            /** Bearer, renewable, scoped, revocable by the person who granted it. */
+            OAUTH,
+            /** Basic with an email, not renewable, and carrying that account's whole authority. */
+            MANUAL_TOKEN
+        }
+
         public boolean isFresh(Instant now) {
             // A minute of headroom: a token that expires while the request is in flight is a
             // failure that looks like a permissions problem.
             return accessExpiresAt.isAfter(now.plusSeconds(60));
+        }
+
+        public boolean isRenewable() {
+            return kind == Kind.OAUTH && refreshToken != null;
         }
     }
 }

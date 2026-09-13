@@ -13,7 +13,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -116,10 +115,23 @@ public class AuthController {
             return redirectTo("/?signin=expired");
         }
 
-        JiraOAuthClient.Tokens tokens = oauth.exchangeCode(code);
-        JiraOAuthClient.AtlassianAccount account = oauth.accountOf(tokens.accessToken());
-
-        List<JiraOAuthClient.AccessibleSite> sites = oauth.accessibleSites(tokens.accessToken());
+        JiraOAuthClient.Tokens tokens;
+        JiraOAuthClient.AtlassianAccount account;
+        List<JiraOAuthClient.AccessibleSite> sites;
+        try {
+            tokens = oauth.exchangeCode(code);
+            account = oauth.accountOf(tokens.accessToken());
+            sites = oauth.accessibleSites(tokens.accessToken());
+        } catch (JiraOAuthClient.OAuthException e) {
+            // This arrives in a browser following a redirect, so it has to end at a page rather
+            // than as a problem document nobody can act on. The usual causes are a client secret
+            // that does not match the client id and a redirect URI that does not match the one
+            // registered — both configuration, both invisible from the response.
+            log.error("The Atlassian token exchange failed. Check that the client secret matches "
+                    + "the client id, and that the callback registered in the developer console "
+                    + "is exactly the configured redirect URI.", e);
+            return redirectTo("/?signin=exchange");
+        }
         if (sites.isEmpty()) {
             // Consent succeeded and reaches no Jira. Saying so beats a session that fails later
             // on every permission check for reasons nobody can see.
@@ -131,6 +143,7 @@ public class AuthController {
 
         sessions.saveConnection(new SessionStore.Connection(
                 account.accountId(), deploymentId, site.cloudId(), site.url(),
+                null, SessionStore.Connection.Kind.OAUTH,
                 tokens.accessToken(), tokens.refreshToken(), tokens.accessExpiresAt(),
                 tokens.grantedScopes(),
                 // Recorded rather than assumed, so the absence of PKCE on Cloud is a reviewable
@@ -147,39 +160,6 @@ public class AuthController {
         return redirectTo(redirectTo.get());
     }
 
-    /**
-     * Whether anybody is signed in, and how signing in works here.
-     *
-     * <p>Unauthenticated on purpose: it is what the sign-in screen asks before there is a
-     * session, and it answers with nothing an anonymous caller should not have — whether a
-     * session exists, and where to start one.
-     */
-    @GetMapping("/status")
-    public ResponseEntity<AuthStatus> status(HttpServletRequest request) {
-        Optional<SessionStore.Session> session =
-                sessionIdOf(request).flatMap(sessions::findSession);
-
-        return ResponseEntity.ok(session
-                .map(active -> new AuthStatus(true, active.displayName(), active.email(),
-                        "ATLASSIAN", null))
-                .orElseGet(() -> new AuthStatus(false, null, null, "ATLASSIAN",
-                        "/api/v1/auth/login")));
-    }
-
-    /** @param loginUrl where to send the browser to sign in, or null when already signed in */
-    public record AuthStatus(boolean authenticated, String displayName, String email,
-                             String method, String loginUrl) {
-    }
-
-    @PostMapping("/logout")
-    public ResponseEntity<Void> logout(HttpServletRequest request, HttpServletResponse response) {
-        sessionIdOf(request).ifPresent(sessions::endSession);
-        // Cleared whether or not a session was found: a cookie naming a session that no longer
-        // exists is only ever a nuisance.
-        response.addCookie(sessionCookie("", 0));
-        return ResponseEntity.noContent().build();
-    }
-
     private Cookie sessionCookie(String value, int maxAge) {
         var cookie = new Cookie(SESSION_COOKIE, value);
         // HttpOnly: script must not be able to read it, which is the difference between one
@@ -190,19 +170,6 @@ public class AuthController {
         cookie.setMaxAge(maxAge);
         cookie.setAttribute("SameSite", "Lax");
         return cookie;
-    }
-
-    static Optional<String> sessionIdOf(HttpServletRequest request) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null) {
-            return Optional.empty();
-        }
-        for (Cookie cookie : cookies) {
-            if (SESSION_COOKIE.equals(cookie.getName()) && !cookie.getValue().isBlank()) {
-                return Optional.of(cookie.getValue());
-            }
-        }
-        return Optional.empty();
     }
 
     private ResponseEntity<Void> redirectTo(String path) {

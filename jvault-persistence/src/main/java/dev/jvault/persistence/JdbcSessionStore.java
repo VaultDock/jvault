@@ -108,11 +108,13 @@ public final class JdbcSessionStore implements SessionStore {
 
         int updated = jdbc.update("""
                         UPDATE jira_connection SET
-                            cloud_id = ?, site_url = ?, key_ring = ?, kek_id = ?, wrapped_dek = ?,
+                            cloud_id = ?, site_url = ?, auth_email = ?, credential_kind = ?,
+                            key_ring = ?, kek_id = ?, wrapped_dek = ?,
                             access_token_enc = ?, refresh_token_enc = ?, access_expires_at = ?,
                             scopes = ?, flow_used = ?, updated_at = ?
                         WHERE account_id = ? AND deployment_id = ?""",
-                connection.cloudId(), connection.siteUrl(), keyRing, access.kekId(),
+                connection.cloudId(), connection.siteUrl(), connection.authEmail(),
+                connection.kind().name(), keyRing, access.kekId(),
                 access.wrappedKey(), access.ciphertext(), refresh,
                 Timestamp.from(connection.accessExpiresAt()), connection.grantedScopes(),
                 connection.flowUsed(), Timestamp.from(Instant.now()),
@@ -128,12 +130,14 @@ public final class JdbcSessionStore implements SessionStore {
         try {
             jdbc.update("""
                             INSERT INTO jira_connection (
-                                account_id, deployment_id, cloud_id, site_url, key_ring, kek_id,
-                                wrapped_dek, access_token_enc, refresh_token_enc,
+                                account_id, deployment_id, cloud_id, site_url, auth_email,
+                                credential_kind, key_ring, kek_id, wrapped_dek,
+                                access_token_enc, refresh_token_enc,
                                 access_expires_at, scopes, flow_used, connected_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     connection.accountId(), connection.deploymentId(), connection.cloudId(),
-                    connection.siteUrl(), keyRing, access.kekId(), access.wrappedKey(),
+                    connection.siteUrl(), connection.authEmail(), connection.kind().name(),
+                    keyRing, access.kekId(), access.wrappedKey(),
                     access.ciphertext(), refresh, Timestamp.from(connection.accessExpiresAt()),
                     connection.grantedScopes(), connection.flowUsed(),
                     Timestamp.from(Instant.now()), Timestamp.from(Instant.now()));
@@ -148,7 +152,8 @@ public final class JdbcSessionStore implements SessionStore {
         String binding = accountId + "|" + deploymentId;
 
         List<Connection> found = jdbc.query("""
-                        SELECT account_id, deployment_id, cloud_id, site_url, key_ring, kek_id,
+                        SELECT account_id, deployment_id, cloud_id, site_url, auth_email,
+                               credential_kind, key_ring, kek_id,
                                wrapped_dek, access_token_enc, refresh_token_enc,
                                access_expires_at, scopes, flow_used
                         FROM jira_connection WHERE account_id = ? AND deployment_id = ?""",
@@ -163,6 +168,8 @@ public final class JdbcSessionStore implements SessionStore {
                             rs.getString("deployment_id"),
                             rs.getString("cloud_id"),
                             rs.getString("site_url"),
+                            rs.getString("auth_email"),
+                            Connection.Kind.valueOf(rs.getString("credential_kind")),
                             open(ring, kekId, wrapped, rs.getBytes("access_token_enc"), binding,
                                     "jira.accessToken"),
                             refreshBytes == null ? null

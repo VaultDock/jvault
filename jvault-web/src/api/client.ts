@@ -66,6 +66,19 @@ export const api = {
 
   signOut: () => request<void>('/api/v1/auth/logout', { method: 'POST' }),
 
+  /**
+   * Signs in with a Jira API token.
+   *
+   * The credential goes straight into the request body and is never kept by the client: no
+   * state, no storage, nothing to read back out of the page afterwards.
+   */
+  importToken: (email: string, token: string) =>
+    request<{ displayName: string | null; email: string | null }>('/api/v1/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, token }),
+    }),
+
   me: () => request<Identity>('/api/v1/meta/me'),
 
   /** The content, rendered for reading. Requires VIEW; taking a copy is a separate grant. */

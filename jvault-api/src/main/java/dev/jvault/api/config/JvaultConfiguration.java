@@ -463,6 +463,13 @@ public class JvaultConfiguration {
     }
 
     @Bean
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+            prefix = "jvault.oauth", name = "allow-manual-token", havingValue = "true")
+    public dev.jvault.jira.oauth.JiraCredentialValidator jiraCredentialValidator() {
+        return new dev.jvault.jira.oauth.JiraCredentialValidator();
+    }
+
+    @Bean
     public SessionStore sessionStore(DataSource dataSource, SensitiveTextCipher cipher,
                                      JvaultProperties properties, SchemaMigrator migrated) {
         return new JdbcSessionStore(dataSource, cipher, properties.crypto().keyRings().get(0));
